@@ -26,3 +26,6 @@ dependencies = [
     "networkx",
     "easydict"
 ]
+
+[tool.setuptools.packages.find]
+include = ["motor_unit_toolbox", "motor_unit_toolbox.*"]
