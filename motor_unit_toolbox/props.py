@@ -184,7 +184,7 @@ def get_coefficient_of_variation(
 
 def get_pulse_to_noise_ratio(
     spike_train: np.ndarray,
-    ips: np.ndarray,
+    ipts: np.ndarray,
     ext_fact: int = 8
     ) -> np.ndarray:
     """Compute the pulse-to-noise ratio (PNR) for each motor unit.
@@ -193,7 +193,7 @@ def get_pulse_to_noise_ratio(
     spike_train (np.ndarray): Binary spike train matrix of shape (n, m),
         where n is the number of time points and m is the number of motor
         units.
-    ips (np.ndarray): Innervated pulse trains (IPTs) with shape (n, m),
+    ipts (np.ndarray): Innervated pulse trains (IPTs) with shape (n, m),
         where n is the number of time points and m is the number of motor
         units.
     ext_fact (int, optional): Extension factor to discard initial spikes.
@@ -215,13 +215,13 @@ def get_pulse_to_noise_ratio(
 
     # Get number of motor units and initialise PNR
     spike_train = _check_mu_format(spike_train.astype(bool))
-    ips = _check_mu_format(ips)
+    ipts = _check_mu_format(ipts)
     units = spike_train.shape[-1]
     pnr = np.zeros(units)
     pnr[:] = np.nan
 
     # Square IPTs
-    ipts2 = ips ** 2
+    ipts2 = ipts ** 2
 
     for unit in range(units):
         # Get the spikes and baseline indexes, discarding the extension factor

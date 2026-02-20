@@ -61,10 +61,10 @@ def plot_spike_trains(
         sorted_idx = np.argsort(first_firings)
 
     ax.eventplot(
-        firings[sorted_idx] / fs + timestamps[0],
+        [firings[idx]/fs + timestamps[0] for idx in sorted_idx],
         orientation="horizontal",
         colors=color_palette,
-        ineoffsets=offset,
+        lineoffsets=offset,
     )
     ax.set_xlim(timestamps[0], timestamps[-1])
     ax.set_yticks(
