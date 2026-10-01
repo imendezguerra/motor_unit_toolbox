@@ -1,7 +1,7 @@
 import networkx as nx
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 
@@ -50,8 +50,9 @@ def test_nmse_identity(muap):
     b=arrays(np.float64, (3, 8), elements=finite_floats),
 )
 def test_nmse_symmetric_and_non_negative(a, b):
-    if not (np.any(a) or np.any(b)):
-        return  # 0/0 undefined
+    # nmse is 0/0 when both signals have (numerically) zero energy, e.g. all
+    # zeros or values so small that squaring them underflows
+    assume(np.sum(a**2) + np.sum(b**2) > 1e-12)
     assert mc.nmse(a, b) == pytest.approx(mc.nmse(b, a))
     assert mc.nmse(a, b) >= 0
 
@@ -66,10 +67,6 @@ def test_nfd_accepts_1d(rng):
     assert mc.norm_farina_distance(a, a) == pytest.approx(0)
 
 
-@pytest.mark.xfail(
-    raises=AssertionError,
-    reason="norm_farina_distance computes muap1_energy from muap2_norm (muap_comp.py)",
-)
 def test_nfd_symmetric(rng):
     a = rng.standard_normal((3, 20))
     b = 3 * rng.standard_normal((3, 20))
@@ -112,19 +109,24 @@ def test_muaps_dist_different_units(muaps):
     assert diff > same + 0.5
 
 
-@pytest.mark.parametrize("metric", ["corr", "cosine", "nfd"])
+@pytest.mark.parametrize("metric", DIST_METRICS)
 def test_muaps_similarity_identity(metric, muap):
     sim, lag = mc.compute_muaps_similarity(muap, muap, metric=metric)
     assert sim == pytest.approx(1)
     assert lag == 0
 
 
-@pytest.mark.xfail(
-    raises=UnboundLocalError,
-    reason="compute_muaps_similarity defaults to metric='nmse', which it does not implement",
-)
-def test_muaps_similarity_default_metric(muap):
-    mc.compute_muaps_similarity(muap, muap)
+def test_muaps_similarity_default_metric_is_nmse(muap):
+    sim, lag = mc.compute_muaps_similarity(muap, muap)
+    assert sim == pytest.approx(1)
+    assert lag == 0
+
+
+def test_muaps_similarity_nmse_matches_distance(muaps):
+    sim, sim_lag = mc.compute_muaps_similarity(muaps[0], muaps[1], metric="nmse")
+    dist, dist_lag = mc.compute_muaps_dist(muaps[0], muaps[1], metric="nmse")
+    assert sim == pytest.approx(1 - dist)
+    assert sim_lag == dist_lag
 
 
 def test_muaps_dist_sets(muaps):

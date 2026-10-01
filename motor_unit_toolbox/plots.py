@@ -1,7 +1,7 @@
 """Functions to plot motor unit spike trains and action potentials"""
 
 from copy import copy
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -90,7 +90,7 @@ def plot_muaps(
     ax: Optional[plt.Axes] = None,
     palette_name: Optional[str] = "viridis",
     normalize: Optional[bool] = False,
-    ch_framed: Optional[str] = "iqr",
+    ch_framed: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp", "per"]] = "iqr",
 ) -> plt.Axes:
     """Plot motor unit action potentials (MUAPs).
 
@@ -104,8 +104,9 @@ def plot_muaps(
             use for plotting. Defaults to "viridis".
         normalize (Optional[bool], optional): Flag to normalize the MUAPs.
             Defaults to False.
-        ch_framed (Optional[str], optional): Channel framing method. Defaults
-            to "iqr".
+        ch_framed (Optional[str], optional): Channel framing method:
+            "iqr", "iqr_ptp", "max_amp", "ptp" or "per". None draws no frames.
+            Defaults to "iqr".
 
     Returns:
         plt.Axes: Axes object containing the MUAP plot.
@@ -239,7 +240,7 @@ def plot_clustered_muaps(
     palette_name: Optional[str] = "viridis",
     color_order: Optional[list] = None,
     normalize: Optional[bool] = False,
-    ch_framed: Optional[str] = "iqr",
+    ch_framed: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp", "per"]] = "iqr",
 ) -> plt.Axes:
     """Plot clustered motor unit action potentials (MUAPs).
 
@@ -259,8 +260,9 @@ def plot_clustered_muaps(
             legend. Defaults to None.
         normalize (Optional[bool], optional): Flag indicating whether to
             normalize the MUAPs. Defaults to False.
-        ch_framed (Optional[str], optional): Channel framing method. Defaults
-            to 'iqr'.
+        ch_framed (Optional[str], optional): Channel framing method:
+            "iqr", "iqr_ptp", "max_amp", "ptp" or "per". None draws no frames.
+            Defaults to "iqr".
 
     Returns:
         plt.Axes: Axes object with the plotted MUAPs.

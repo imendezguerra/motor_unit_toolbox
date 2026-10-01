@@ -1,7 +1,7 @@
 """Functions to compute MUAP similarity and distance metrics"""
 
 import itertools
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -164,7 +164,7 @@ def norm_farina_distance(muap1: np.ndarray, muap2: np.ndarray) -> float:
     muap2_norm = (muap2 - muap2_mean[:, None]) / muap2_l2
 
     # Compute energy
-    muap1_energy = np.sum(np.power(muap2_norm, 2))
+    muap1_energy = np.sum(np.power(muap1_norm, 2))
     muap2_energy = np.sum(np.power(muap2_norm, 2))
 
     # Compute normalized farina distance
@@ -248,8 +248,8 @@ def get_alignmnent(
 def compute_muaps_similarity(
     muap1: np.ndarray,
     muap2: np.ndarray,
-    sel_chs_by: Optional[str] = "iqr",
-    metric: Optional[str] = "nmse"
+    sel_chs_by: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr",
+    metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse"
 ) -> Tuple[float, int]:
     """Compute the similarity between two MUAPs.
 
@@ -258,9 +258,10 @@ def compute_muaps_similarity(
             (ch_rows, ch_cols, samples).
         muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        sel_chs_by (str, optional): Method for selecting significant amplitude
-            channels. Defaults to "iqr".
-        metric (str, optional): Similarity metric to compute. Defaults to "nmse".
+        sel_chs_by (str, optional): Method for selecting significant
+            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
+        metric (str, optional): Similarity metric to compute:
+            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
 
     Returns:
         Tuple[float, int]: The similarity between the two MUAPs and the
@@ -305,6 +306,8 @@ def compute_muaps_similarity(
         muaps_sim = 1 - spatial.distance.cosine(
             muap1_sel.flatten(), muap2_sel.flatten()
         )
+    elif metric == "nmse":
+        muaps_sim = 1 - nmse(muap1_sel.flatten(), muap2_sel.flatten())
     elif metric == "nfd":
         muaps_sim = 1 - norm_farina_distance(muap1_sel.flatten(), muap2_sel.flatten())
 
@@ -314,8 +317,8 @@ def compute_muaps_similarity(
 def compute_muaps_dist(
         muap1: np.ndarray,
         muap2: np.ndarray,
-        sel_chs_by: Optional[str] = "iqr",
-        metric: Optional[str] = "nmse"
+        sel_chs_by: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr",
+        metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse"
         ) -> Tuple[float, int]:
     """Compute the distance between two MUAPs.
 
@@ -324,9 +327,10 @@ def compute_muaps_dist(
             (ch_rows, ch_cols, samples).
         muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        sel_chs_by (str, optional): Method for selecting significant amplitude
-            channels. Defaults to "iqr".
-        metric (str, optional): Distance metric to compute. Defaults to "nmse".
+        sel_chs_by (str, optional): Method for selecting significant
+            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
+        metric (str, optional): Distance metric to compute:
+            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
 
     Returns:
         Tuple[float, int]: The distance between the two MUAPs and the
@@ -381,8 +385,8 @@ def compute_muaps_dist(
 def compute_muaps_dist_sets(
     muaps1: np.ndarray,
     muaps2: np.ndarray,
-    dist_metric: Optional[str] = "nmse",
-    sel_chs_method: Optional[str] = "iqr"
+    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse",
+    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr"
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute the distance between sets of MUAPs.
 
@@ -391,9 +395,10 @@ def compute_muaps_dist_sets(
             (n_units1, ch_rows, ch_cols, samples).
         muaps2 (np.ndarray): Second set of motor unit action potentials with shape
             (n_units2, ch_rows, ch_cols, samples).
-        dist_metric (str, optional): Distance metric to compute. Defaults to "nmse".
-        sel_chs_method (str, optional): Method for selecting significant amplitude
-            channels. Defaults to "iqr".
+        dist_metric (str, optional): Distance metric to compute:
+            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
+        sel_chs_method (str, optional): Method for selecting significant
+            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
 
     Returns:
         Tuple[np.ndarray, np.ndarray]: The distance matrix between the two sets of
@@ -442,17 +447,18 @@ def compute_muaps_dist_sets(
 
 def compute_all_muaps_dist(
     muaps: np.ndarray,
-    dist_metric: Optional[str] = "nmse",
-    sel_chs_method: Optional[str] = "iqr"
+    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse",
+    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr"
     ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute the distance between all pairs of MUAPs.
 
     Args:
         muaps (np.ndarray): Motor unit action potentials with shape
             (n_units, ch_rows, ch_cols, samples).
-        dist_metric (str, optional): Distance metric to compute. Defaults to "nmse".
-        sel_chs_method (str, optional): Method for selecting significant amplitude
-            channels. Defaults to "iqr".
+        dist_metric (str, optional): Distance metric to compute:
+            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
+        sel_chs_method (str, optional): Method for selecting significant
+            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
 
     Returns:
         Tuple[np.ndarray, np.ndarray]: The distance matrix between all pairs of MUAPs
@@ -505,9 +511,11 @@ def compute_all_muaps_dist(
 
 def cluster_muaps(
     all_muaps_dist: np.ndarray,
-    cluster_method: Optional[str] = "ward",
-    dist_metric: Optional[str] = "corr",
-    sel_chs_method: Optional[str] = "max_abs",
+    cluster_method: Literal[
+        "single", "complete", "average", "weighted", "centroid", "median", "ward"
+    ] = "ward",
+    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "corr",
+    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "max_abs",
     thr_vals: Optional[np.ndarray] = np.arange(0, 2.0001, 0.001),  # noqa: B008 (read-only)
     flag_plot: Optional[bool] = True,
 ) -> Tuple[pd.DataFrame, Dict[str, np.ndarray]]:
@@ -515,10 +523,12 @@ def cluster_muaps(
 
     Args:
         all_muaps_dist (np.ndarray): Distance matrix between all pairs of MUAPs.
-        cluster_method (str, optional): Clustering method. Defaults to "ward".
-        dist_metric (str, optional): Distance metric. Defaults to "corr".
-        sel_chs_method (str, optional): Method for selecting significant amplitude channels.
-            Defaults to "max_abs".
+        cluster_method (str, optional): Linkage method passed to
+            scipy.cluster.hierarchy.linkage. Defaults to "ward".
+        dist_metric (str, optional): Distance metric used to build
+            all_muaps_dist (stored in the output only). Defaults to "corr".
+        sel_chs_method (str, optional): Channel selection method used to
+            build all_muaps_dist (stored in the output only). Defaults to "max_abs".
         thr_vals (np.ndarray, optional): Threshold values for clustering. Defaults to
             np.arange(0, 2.0001, 0.001).
         flag_plot (bool, optional): Flag to plot clustering metrics. Defaults to True.
@@ -967,7 +977,7 @@ def assign_muaps_across_seq_trials(
     dist_mat: np.ndarray,
     trial_labels: np.ndarray,
     trial_set: List[int],
-    assign_method: Optional[str] = "hungarian",
+    assign_method: Literal["hungarian", "grid-search"] = "hungarian",
     dist_thr: Optional[float] = 0.3
 ) -> Tuple[Dict[str, List], nx.DiGraph, np.ndarray]:
     """
@@ -977,8 +987,8 @@ def assign_muaps_across_seq_trials(
         dist_mat (np.ndarray): The distance matrix.
         trial_labels (np.ndarray): All trial labels.
         trial_set (List[int]): The trial labels present in the distance matrix.
-        assign_method (str, optional): The method to use for assignment.
-            Defaults to "hungarian".
+        assign_method (str, optional): The method to use for assignment:
+            "hungarian" or "grid-search". Defaults to "hungarian".
         dist_thr (float, optional): The distance threshold. Defaults to 0.3.
 
     Returns:
@@ -1038,10 +1048,10 @@ def assign_muaps_all_trials(
     muaps: np.ndarray,
     trial_labels: np.ndarray,
     trial_set: List[int],
-    assign_method: str = "hungarian",
-    dist_metric: str = "nmse",
+    assign_method: Literal["hungarian", "grid-search"] = "hungarian",
+    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse",
     dist_thr: float = 0.3,
-    sel_chs_method: str = "iqr",
+    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr",
 ) -> Tuple[List[int], List[List[int]], pd.DataFrame, nx.DiGraph]:
     """
     Assign MUAPs across all trials based on the given distance matrix.
@@ -1050,12 +1060,13 @@ def assign_muaps_all_trials(
         muaps (np.ndarray): MUAPs with shape (units, ch_rows, ch_cols, samples).
         trial_labels (np.ndarray): All trial labels.
         trial_set (List[int]): The trial labels of the MUAPs.
-        assign_method (str, optional): The method to use for assignment.
-            Defaults to "hungarian".
-        dist_metric (str, optional): The distance metric. Defaults to "nmse".
+        assign_method (str, optional): The method to use for assignment:
+            "hungarian" or "grid-search". Defaults to "hungarian".
+        dist_metric (str, optional): The distance metric: "corr", "cosine", "nmse" or "nfd".
+            Defaults to "nmse".
         dist_thr (float, optional): The distance threshold. Defaults to 0.3.
-        sel_chs_method (str, optional): The method to use for selecting channels.
-            Defaults to "iqr".
+        sel_chs_method (str, optional): The method to use for selecting
+            channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
 
     Returns:
         Tuple[List[int], List[List[int]], pd.DataFrame, nx.DiGraph]: A tuple

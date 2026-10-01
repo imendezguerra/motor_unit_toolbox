@@ -2,7 +2,7 @@
 
 import itertools
 from copy import copy
-from typing import Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 from scipy import signal
@@ -564,7 +564,7 @@ def center_muaps(muaps: np.ndarray) -> np.ndarray:
 
 def get_muap_waveform_length(
     muaps: np.ndarray,
-    sel_chs_by: Optional[str] = "iqr"
+    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr"
 ) -> np.ndarray:
     """
     Compute the waveform length of motor unit action potentials (MUAPs).
@@ -574,7 +574,9 @@ def get_muap_waveform_length(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
 
     Returns:
         np.ndarray: Array of waveform lengths with shape (m, r, c), where m is
@@ -628,7 +630,7 @@ def get_muap_waveform_length(
 
 def get_muap_energy(
     muaps: np.ndarray,
-    sel_chs_by: Optional[str] = "iqr"
+    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr"
 ) -> np.ndarray:
     """
     Compute the energy of motor unit action potentials (MUAPs).
@@ -638,7 +640,9 @@ def get_muap_energy(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
 
     Returns:
         np.ndarray: Array of energy values with shape (m, r, c), where m is
@@ -688,7 +692,10 @@ def get_muap_energy(
     return energy
 
 
-def get_muap_ptp(muaps: np.ndarray, sel_chs_by: Optional[str] = "iqr") -> np.ndarray:
+def get_muap_ptp(
+    muaps: np.ndarray,
+    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
+) -> np.ndarray:
     """
     Compute the peak-to-peak amplitude of motor unit action potentials (MUAPs).
 
@@ -697,7 +704,9 @@ def get_muap_ptp(muaps: np.ndarray, sel_chs_by: Optional[str] = "iqr") -> np.nda
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
 
     Returns:
         np.ndarray: Array of peak-to-peak amplitudes with shape (m, r, c), where m is
@@ -748,7 +757,7 @@ def get_muap_ptp(muaps: np.ndarray, sel_chs_by: Optional[str] = "iqr") -> np.nda
 
 def get_muap_ptp_time(
     muaps: np.ndarray,
-    sel_chs_by: Optional[str] = "iqr",
+    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
 ) -> np.ndarray:
     """
     Compute the peak-to-peak time (in samples) of motor unit action potentials (MUAPs).
@@ -758,7 +767,9 @@ def get_muap_ptp_time(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
 
     Returns:
         np.ndarray: Array of peak-to-peak times (in samples) with shape (m, r, c),
@@ -814,7 +825,7 @@ def get_muap_ptp_time(
 
 def get_muap_peak_frequency(
     muaps: np.ndarray,
-    sel_chs_by: Optional[str] = "iqr",
+    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
     fs: Optional[int] = 2048
 ) -> np.ndarray:
     """
@@ -825,7 +836,9 @@ def get_muap_peak_frequency(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
         fs (int, optional): Sampling frequency in Hz. Defaults to 2048.
 
     Returns:
@@ -885,7 +898,7 @@ def get_muap_peak_frequency(
 
 def get_muap_median_frequency(
         muaps: np.ndarray,
-        sel_chs_by: Optional[str] = "iqr",
+        sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
         fs: Optional[int] = 2048
     ) -> np.ndarray:
     """
@@ -896,7 +909,9 @@ def get_muap_median_frequency(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
         fs (int, optional): Sampling frequency in Hz. Defaults to 2048.
 
     Returns:
@@ -962,7 +977,7 @@ def get_muap_median_frequency(
 
 def get_muap_mean_frequency(
         muaps: np.ndarray,
-        sel_chs_by: Optional[str] = "iqr",
+        sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
         fs: Optional[int] = 2048
     ) -> np.ndarray:
     """
@@ -973,7 +988,9 @@ def get_muap_mean_frequency(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels. Defaults to "iqr".
+        sel_chs_by (str, optional): Method for selecting channels:
+            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
+            Defaults to "iqr".
         fs (int, optional): Sampling frequency in Hz. Defaults to 2048.
 
     Returns:
