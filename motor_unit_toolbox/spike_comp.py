@@ -176,8 +176,9 @@ def rate_of_agreement(
         if len( spike_trains_test.shape ) == 1:
             spike_trains_test = np.expand_dims(spike_trains_test, axis=-1)
 
-    if spike_trains_ref.shape[0] != spike_trains_test.shape[0]:
-        raise ValueError(f'Time dimensionality mismatch between ref {spike_trains_ref.shape} and test {spike_trains_test.shape}.')
+    if spike_trains_ref is not None and spike_trains_test is not None:
+        if spike_trains_ref.shape[0] != spike_trains_test.shape[0]:
+            raise ValueError(f'Time dimensionality mismatch between ref {spike_trains_ref.shape} and test {spike_trains_test.shape}.')
 
     # Put tolerances into samples
     tol_spike = round(tol_spike_ms/1000 * fs)
