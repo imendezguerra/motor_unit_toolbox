@@ -139,7 +139,8 @@ def get_inst_discharge_rate(
 
 def get_coefficient_of_variation(
         spike_train: np.ndarray,
-        timestamps: Union[list, np.ndarray]
+        timestamps: Union[list, np.ndarray],
+        discard_isi: Optional[float] = 0.25,
         ) -> np.ndarray:
     """
     Calculate the coefficient of variation (CoV) for each motor unit in a spike
@@ -151,6 +152,8 @@ def get_coefficient_of_variation(
             units.
         timestamps (Union[list, np.ndarray]): Array of timestamps
             corresponding to each time point in the spike train.
+        discard_isi (Optional[float], defaults to 0.25): Interspike intervals 
+            greater than value in s are discarded as considered silent period.
 
     Returns:
         np.ndarray: Array of CoV values for each motor unit, scaled by 100.
@@ -159,8 +162,7 @@ def get_coefficient_of_variation(
         - The CoV is calculated as the standard deviation of the interspike
           intervals divided by the mean interspike interval.
         - Interspike intervals greater than 0.25 s (or discharge rate less than
-          4 Hz) and intervals less than 0.02 s (or discharge rate greater than
-          50 Hz) are discarded, based on "Negro F (2016). Multi-channel
+          4 Hz) are discarded, based on "Negro F (2016). Multi-channel
           intramuscular and surface EMG decomposition by convolutive blind
           source separation."
     """
@@ -176,10 +178,11 @@ def get_coefficient_of_variation(
 
         times_spikes = timestamps[spike_train[:, unit]]
         isi = np.diff(times_spikes)
-        isi = isi[isi < 0.25]
+        if discard_isi is not None:
+            isi = isi[isi < discard_isi]
         cov[unit] = np.std(isi) / np.mean(isi)
 
-    return cov * 100
+    return cov
 
 
 def get_pulse_to_noise_ratio(

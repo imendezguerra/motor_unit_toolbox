@@ -134,7 +134,7 @@ def rate_of_agreement(
     fs: Optional[int] = 2048,
     tol_spike_ms: Optional[int] = 1,
     tol_train_ms: Optional[int] = 40,
-) -> Tuple[np.ndarray, List[Tuple[int, int]], np.ndarray]:
+    ) -> Tuple[np.ndarray, List[Tuple[int, int]], np.ndarray]:
     """Compute the rate of agreement between two sets of spike trains.
 
     Args:
