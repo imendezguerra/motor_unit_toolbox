@@ -2,17 +2,19 @@
 
 from copy import copy
 from typing import List, Optional, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
+
 from motor_unit_toolbox.muap_comp import (
-    get_percentile_ch,
     get_highest_amp_ch,
-    get_highest_ptp_ch,
     get_highest_iqr_ch,
     get_highest_iqr_ptp_ch,
+    get_highest_ptp_ch,
+    get_percentile_ch,
 )
 
 
@@ -222,7 +224,7 @@ def legend_without_duplicate_labels(ax: plt.Axes) -> None:
     """
     handles, labels = ax.get_legend_handles_labels()
     unique = [
-        (h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i]
+        (h, lab) for i, (h, lab) in enumerate(zip(handles, labels)) if lab not in labels[:i]
     ]
     ax.legend(*zip(*unique), bbox_to_anchor=(1.2, 1))
 
@@ -263,7 +265,7 @@ def plot_clustered_muaps(
     Returns:
         plt.Axes: Axes object with the plotted MUAPs.
     """
-    
+
     # Check muaps dimensions
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)

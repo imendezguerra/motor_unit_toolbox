@@ -2,15 +2,16 @@
 
 import itertools
 from copy import copy
-from typing import Union, Optional, Tuple
+from typing import Optional, Tuple, Union
+
 import numpy as np
 from scipy import signal
+
 from motor_unit_toolbox.muap_comp import (
-    get_percentile_ch,
     get_highest_amp_ch,
-    get_highest_ptp_ch,
     get_highest_iqr_ch,
     get_highest_iqr_ptp_ch,
+    get_highest_ptp_ch,
 )
 
 
@@ -152,7 +153,7 @@ def get_coefficient_of_variation(
             units.
         timestamps (Union[list, np.ndarray]): Array of timestamps
             corresponding to each time point in the spike train.
-        discard_isi (Optional[float], defaults to 0.25): Interspike intervals 
+        discard_isi (Optional[float], defaults to 0.25): Interspike intervals
             greater than value in s are discarded as considered silent period.
 
     Returns:
@@ -453,10 +454,10 @@ def get_muaps(
         spike_trains (np.ndarray): Binary spike train matrix of shape (n, m),
             where n is the number of time points and m is the number of motor
             units.
-        emg_ch_array (np.ndarray): sEMG signal matrix of shape (r, c, n), 
-            where r is the number of rows, c is the number of columns, and n 
+        emg_ch_array (np.ndarray): sEMG signal matrix of shape (r, c, n),
+            where r is the number of rows, c is the number of columns, and n
             is the number of time points.
-        fs (int, optional): Sampling frequency of the sEMG signal. Defaults to 
+        fs (int, optional): Sampling frequency of the sEMG signal. Defaults to
             2048 Hz.
         win_ms (int, optional): Window size in milliseconds. Defaults to 25.
 
@@ -867,7 +868,7 @@ def get_muap_peak_frequency(
         if not np.any(sel_chs_mask):
             sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
     else:
-        sel_chs_mask = np.ones((muaps.shape[1:3])).astype(bool)
+        sel_chs_mask = np.ones(muaps.shape[1:3]).astype(bool)
 
     # Initialise peak frequency
     peak_freq = np.empty(muaps.shape[0:3])
@@ -942,7 +943,7 @@ def get_muap_median_frequency(
         if not np.any(sel_chs_mask):
             sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
     else:
-        sel_chs_mask = np.ones((muaps.shape[1:3])).astype(bool)
+        sel_chs_mask = np.ones(muaps.shape[1:3]).astype(bool)
 
     # Initialise peak frequency
     med_freq = np.empty(muaps.shape[0:3])

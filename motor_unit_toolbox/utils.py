@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def firings_to_binary(firings: list, signal_length: int) -> np.ndarray:
     """Convert firings list to binary matrix representation
 

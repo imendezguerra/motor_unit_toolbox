@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,23 +9,107 @@ description = "motor_unit_toolbox is a package to analyse motor units"
 authors = [
     {name = "Irene Mendez Guerra"}
 ]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License"
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
-    "numpy",
-    "scikit-learn",
-    "scipy",
-    "pandas",
-    "matplotlib",
-    "seaborn",
-    "networkx",
-    "easydict"
+    "numpy>=1.22",
+    "scikit-learn>=1.0",
+    "scipy>=1.8",
+    "pandas>=1.4",
+    "matplotlib>=3.5",
+    "seaborn>=0.11",
+    "networkx>=2.6",
+    "easydict>=1.9"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+    "hypothesis>=6",
+    "ruff>=0.6",
+    "pre-commit>=3",
 ]
 
 [tool.setuptools.packages.find]
 include = ["motor_unit_toolbox", "motor_unit_toolbox.*"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+xfail_strict = true
+markers = [
+    "slow: tests that take more than a second or so (clustering, tracking)",
+    "plot: matplotlib smoke tests",
+]
+filterwarnings = [
+    "error",
+    # Third-party deprecations we cannot act on
+    "ignore::DeprecationWarning:seaborn.*",
+    "ignore::DeprecationWarning:dateutil.*",
+    "ignore::PendingDeprecationWarning",
+]
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["motor_unit_toolbox"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if flag_debug:",
+    "if flag_plot:",
+]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = ["*.egg-info"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "NPY",  # numpy-specific rules
+    "PT",   # flake8-pytest-style
+]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "UP006",  # keep typing.List/Tuple style used across the package
+    "UP007",  # keep Optional[...] / Union[...] style used across the package
+    "UP035",  # same as above (deprecated typing imports)
+    "UP045",  # same as above (Optional -> X | None)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B018"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["motor_unit_toolbox"]

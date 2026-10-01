@@ -1,6 +1,7 @@
 """Functions to compare spike trains"""
-from typing import Tuple, Optional, List, Union
 import itertools
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
 from scipy import signal
 
@@ -35,7 +36,7 @@ def rate_of_agreement_paired(
               motor units, with shape (n).
 
     Note:
-        - The function assumes that the spike trains between the sets are matched 
+        - The function assumes that the spike trains between the sets are matched
           and in the same order.
     """
     # Check spike trains shape
@@ -58,16 +59,16 @@ def rate_of_agreement_paired(
     #  If there are no spikes return empty RoA
     if (not np.any(spike_trains_ref)) | (not np.any(spike_trains_test)):
         pair_idx = np.arange(n_units)
-        pair_lag = np.zeros((n_units))
-        roa = np.zeros((n_units))
+        pair_lag = np.zeros(n_units)
+        roa = np.zeros(n_units)
         return roa, pair_idx, pair_lag
 
     # Compute the RoA between the sets
     #  --------------------------------
     # Initialise correlation variables
-    spikes_corr = np.zeros((n_units))
-    roa = np.empty((n_units))
-    pair_lag = np.zeros((n_units))
+    spikes_corr = np.zeros(n_units)
+    roa = np.empty(n_units)
+    pair_lag = np.zeros(n_units)
     pair_idx = [(unit, unit) for unit in range(n_units)]
 
     for unit in range(n_units):
@@ -138,9 +139,9 @@ def rate_of_agreement(
     """Compute the rate of agreement between two sets of spike trains.
 
     Args:
-        spike_trains_ref (Union[np.ndarray, None]): Reference spike trains 
+        spike_trains_ref (Union[np.ndarray, None]): Reference spike trains
             with shape (m, n1) where m is the number of samples and n1 is the
-            number of motor units in the reference set. If None are provided, 
+            number of motor units in the reference set. If None are provided,
             the function will compute the RoA within the test set.
         spike_trains_test (np.ndarray): Test spike trains with shape (m, n2),
             where m is the number of samples and n2 is the number of motor units
@@ -160,7 +161,7 @@ def rate_of_agreement(
               motor units.
 
     Note:
-        - The function does not assume that the spike trains between the sets are 
+        - The function does not assume that the spike trains between the sets are
           matched nor in the same order.
         - The dimensions of the output arrays will depend on the number of matched
           pairs between the sets.
@@ -174,7 +175,7 @@ def rate_of_agreement(
     if spike_trains_test is not None:
         if len( spike_trains_test.shape ) == 1:
             spike_trains_test = np.expand_dims(spike_trains_test, axis=-1)
-    
+
     if spike_trains_ref.shape[0] != spike_trains_test.shape[0]:
         raise ValueError(f'Time dimensionality mismatch between ref {spike_trains_ref.shape} and test {spike_trains_test.shape}.')
 
@@ -188,8 +189,8 @@ def rate_of_agreement(
     #  If no spike trains to test are provided, return empty RoA
     if not np.any(spike_trains_test):
         pair_idx = np.arange(n_units_test)
-        pair_lag = np.zeros((n_units_test))
-        roa = np.zeros((n_units_test))
+        pair_lag = np.zeros(n_units_test)
+        roa = np.zeros(n_units_test)
         return roa, pair_idx, pair_lag
 
     if spike_trains_ref is None:
@@ -270,7 +271,7 @@ def rate_of_agreement(
             spikes_corr[:, idx_max_corr[0]] = 0
 
     # Compute rate of agreement
-    roa = np.empty((len(pair_idx)))
+    roa = np.empty(len(pair_idx))
     for i, pair in enumerate(pair_idx):
         # Get corresponding firings and apply optimal lag
         if spike_trains_ref is None:
@@ -318,9 +319,9 @@ def rate_of_agreement_full(
     """Compute the rate of agreement between two sets of spike trains.
 
     Args:
-        spike_trains_ref (np.ndarray): Reference spike trains  with shape 
-            (m, n1) where m is the number of samples and n1 is the number of 
-            motor units in the reference set. 
+        spike_trains_ref (np.ndarray): Reference spike trains  with shape
+            (m, n1) where m is the number of samples and n1 is the number of
+            motor units in the reference set.
         spike_trains_test (np.ndarray): Test spike trains with shape (m, n2),
             where m is the number of samples and n2 is the number of motor units
             in the test set.
@@ -338,7 +339,7 @@ def rate_of_agreement_full(
               motor units, with shape (n1, n2).
 
     Note:
-        - The function does not assume that the spike trains between the sets are 
+        - The function does not assume that the spike trains between the sets are
           matched nor in the same order.
     """
 
@@ -350,7 +351,7 @@ def rate_of_agreement_full(
 
     if len( spike_trains_test.shape ) == 1:
         spike_trains_test = np.expand_dims(spike_trains_test, axis=-1)
-    
+
     if spike_trains_ref.shape[0] != spike_trains_test.shape[0]:
         raise ValueError(f'Time dimensionality mismatch between ref {spike_trains_ref.shape} and test {spike_trains_test.shape}.')
 
@@ -451,7 +452,7 @@ def rate_of_agreement_all(
               motor units, with shape (n).
 
     Note:
-        - The function does not assume that the spike trains between the sets are 
+        - The function does not assume that the spike trains between the sets are
           matched nor in the same order.
     """
 
@@ -565,8 +566,8 @@ def precision_sensitivity_f1_paired(
        paired spike trains.
 
     Args:
-        spike_trains_ref (np.ndarray): Reference spike trains with shape (m, n) 
-            where m is the number of samples and n is the number of motor units. 
+        spike_trains_ref (np.ndarray): Reference spike trains with shape (m, n)
+            where m is the number of samples and n is the number of motor units.
         spike_trains_test (np.ndarray): Test spike trains with shape (m, n),
             where m is the number of samples and n is the number of motor units.
         fs (Optional[int], optional): Sampling frequency in Hz. Defaults to 2048.
@@ -578,7 +579,7 @@ def precision_sensitivity_f1_paired(
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray, List[Tuple[int, int]], np.ndarray]:
             A tuple containing:
-            - precision (np.ndarray): Precision values for each motor unit, with 
+            - precision (np.ndarray): Precision values for each motor unit, with
               shape (n).
             - sensitivity (np.ndarray): Sensitivity values for each motor unit, with
               shape (n).
@@ -590,7 +591,7 @@ def precision_sensitivity_f1_paired(
               motor units, with shape (n).
 
     Note:
-        - The function assumes that the spike trains between the sets are matched 
+        - The function assumes that the spike trains between the sets are matched
           and in the same order.
     """
 
@@ -614,10 +615,10 @@ def precision_sensitivity_f1_paired(
     #  If there are no spikes return zeros
     if (not np.any(spike_trains_ref)) | (not np.any(spike_trains_test)):
         pair_idx = np.arange(n_units)
-        pair_lag = np.zeros((n_units))
-        precision = np.zeros((n_units))
-        sensitivity = np.zeros((n_units))
-        f1score = np.zeros((n_units))
+        pair_lag = np.zeros(n_units)
+        precision = np.zeros(n_units)
+        sensitivity = np.zeros(n_units)
+        f1score = np.zeros(n_units)
         return precision, sensitivity, f1score, pair_idx, pair_lag
 
     # Compute the PRECISION, SENSITIVITY, and F1-SCORE between the sets
@@ -626,12 +627,12 @@ def precision_sensitivity_f1_paired(
     # sensitivity (recall) = TP / (TP + FN)
     # f1-score = 2 * precision * sensitivity / (precision + sensitivity)
 
-    tp = np.zeros((n_units))  # Actual spikes
-    fp = np.zeros((n_units))  #  Incorrect spikes
-    fn = np.zeros((n_units))  # Missed spikes
+    tp = np.zeros(n_units)  # Actual spikes
+    fp = np.zeros(n_units)  #  Incorrect spikes
+    fn = np.zeros(n_units)  # Missed spikes
 
-    spikes_corr = np.zeros((n_units))
-    pair_lag = np.zeros((n_units))
+    spikes_corr = np.zeros(n_units)
+    pair_lag = np.zeros(n_units)
     pair_idx = [(unit, unit) for unit in range(n_units)]
 
     for unit in range(n_units):
@@ -706,8 +707,8 @@ def get_tp_fp_fn_paired(
        between two sets of paired spike trains.
 
     Args:
-        spike_trains_ref (np.ndarray): Reference spike trains with shape (m, n) 
-            where m is the number of samples and n is the number of motor units. 
+        spike_trains_ref (np.ndarray): Reference spike trains with shape (m, n)
+            where m is the number of samples and n is the number of motor units.
         spike_trains_test (np.ndarray): Test spike trains with shape (m, n),
             where m is the number of samples and n is the number of motor units.
         fs (Optional[int], optional): Sampling frequency in Hz. Defaults to 2048.
@@ -717,7 +718,7 @@ def get_tp_fp_fn_paired(
             Defaults to 40.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, List[Tuple[int, int]], np.ndarray]: 
+        Tuple[np.ndarray, np.ndarray, np.ndarray, List[Tuple[int, int]], np.ndarray]:
         A tuple containing:
             - tp (np.ndarray): True positives, with shape (m, n).
             - fp (np.ndarray): False positives, with shape (m, n).
@@ -728,7 +729,7 @@ def get_tp_fp_fn_paired(
               motor units, with shape (n).
 
     Note:
-        - The function assumes that the spike trains between the sets are matched 
+        - The function assumes that the spike trains between the sets are matched
           and in the same order.
     """
 
@@ -753,10 +754,10 @@ def get_tp_fp_fn_paired(
     #  If there are no spikes return zeros
     if (not np.any(spike_trains_ref)) | (not np.any(spike_trains_test)):
         pair_idx = np.arange(n_units)
-        pair_lag = np.zeros((n_units))
-        tp = np.zeros((n_units))  # Correctly detected spikes
-        fp = np.zeros((n_units))  # Incorrectly detected spikes
-        fn = np.zeros((n_units))  # Missed spikes
+        pair_lag = np.zeros(n_units)
+        tp = np.zeros(n_units)  # Correctly detected spikes
+        fp = np.zeros(n_units)  # Incorrectly detected spikes
+        fn = np.zeros(n_units)  # Missed spikes
         return tp, fp, fn, pair_idx, pair_lag
 
     # Compute the TRUE POSITIVES, FALSE POSITIVES, and FALSE NEGATIVES between the sets
@@ -766,8 +767,8 @@ def get_tp_fp_fn_paired(
     fp = np.zeros_like(spike_trains_test)  #  Incorrect spikes
     fn = np.zeros_like(spike_trains_test)  # Missed spikes
 
-    spikes_corr = np.zeros((n_units))
-    pair_lag = np.zeros((n_units))
+    spikes_corr = np.zeros(n_units)
+    pair_lag = np.zeros(n_units)
     pair_idx = [(unit, unit) for unit in range(n_units)]
 
     for unit in range(n_units):

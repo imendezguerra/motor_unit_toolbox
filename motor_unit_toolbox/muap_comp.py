@@ -1,21 +1,22 @@
 """Functions to compute MUAP similarity and distance metrics"""
 
 import itertools
-from typing import Optional, Tuple, Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional, Tuple
+
+import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from scipy import signal, stats, spatial, cluster, optimize
-from sklearn import metrics
-import networkx as nx
 from easydict import EasyDict as edict
+from scipy import cluster, optimize, signal, spatial, stats
+from sklearn import metrics
 
 
 def get_highest_iqr_ch(muap: np.ndarray) -> np.ndarray:
     """Compute the highest interquartile range (IQR) channels.
 
     Args:
-        muap (ndarray): Motor unit action potential with shape 
+        muap (ndarray): Motor unit action potential with shape
             (ch_rows, ch_cols, samples)
 
     Returns:
@@ -40,12 +41,12 @@ def get_percentile_ch(
     """Compute the channels that exceed a certain percentile threshold.
 
     Args:
-        muap (ndarray): Motor unit action potential with shape 
+        muap (ndarray): Motor unit action potential with shape
             (ch_rows, ch_cols, samples)
         thr (int, optional): The percentile threshold. Defaults to 90.
 
     Returns:
-        ndarray: A boolean mask indicating the channels that exceed the 
+        ndarray: A boolean mask indicating the channels that exceed the
             specified percentile threshold.
     """
     peak_amps = np.amax(np.abs(muap), axis=-1)
@@ -59,11 +60,11 @@ def get_highest_iqr_ptp_ch(muap: np.ndarray) -> np.ndarray:
     """Compute the channels with the highest peak-to-peak (PTP) amplitude.
 
     Args:
-        muap (np.ndarray): Motor unit action potential with shape 
+        muap (np.ndarray): Motor unit action potential with shape
             (ch_rows, ch_cols, samples)
 
     Returns:
-        np.ndarray: A boolean mask indicating the channels with the highest 
+        np.ndarray: A boolean mask indicating the channels with the highest
             PTP amplitude.
     """
 
@@ -82,11 +83,11 @@ def get_highest_amp_ch(muap: np.ndarray) -> np.ndarray:
     """Compute the channels with the highest amplitude.
 
     Args:
-        muap (ndarray): Motor unit action potential with shape 
+        muap (ndarray): Motor unit action potential with shape
             (ch_rows, ch_cols, samples)
 
     Returns:
-        ndarray: A boolean mask indicating the channels with the highest 
+        ndarray: A boolean mask indicating the channels with the highest
             amplitude.
     """
     peak_amps = np.amax(np.abs(muap), axis=-1)
@@ -99,11 +100,11 @@ def get_highest_ptp_ch(muap: np.ndarray) -> np.ndarray:
     """Compute the channels with the highest peak-to-peak (PTP) amplitude.
 
     Args:
-        muap (np.ndarray): Motor unit action potential with shape 
+        muap (np.ndarray): Motor unit action potential with shape
             (ch_rows, ch_cols, samples)
 
     Returns:
-        np.ndarray: A boolean mask indicating the channels with the highest 
+        np.ndarray: A boolean mask indicating the channels with the highest
             PTP amplitude.
     """
     ptp_amps = np.ptp(muap, axis=-1)
@@ -116,9 +117,9 @@ def nmse(muap1: np.ndarray, muap2: np.ndarray) -> float:
     """Compute the normalized mean squared error (NMSE) between two MUAPs.
 
     Args:
-        muap1 (np.ndarray): First motor unit action potential with shape 
+        muap1 (np.ndarray): First motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        muap2 (np.ndarray): Second motor unit action potential with shape 
+        muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
 
     Returns:
@@ -136,9 +137,9 @@ def norm_farina_distance(muap1: np.ndarray, muap2: np.ndarray) -> float:
     """Compute the normalized Farina distance between two MUAPs.
 
     Args:
-        muap1 (np.ndarray): First motor unit action potential with shape 
+        muap1 (np.ndarray): First motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        muap2 (np.ndarray): Second motor unit action potential with shape 
+        muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
 
     Returns:
@@ -182,9 +183,9 @@ def get_alignmnent(
     """Compute the alignment lag between two MUAPs.
 
     Args:
-        muap1 (np.ndarray): First motor unit action potential with shape 
+        muap1 (np.ndarray): First motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        muap2 (np.ndarray): Second motor unit action potential with shape 
+        muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
         flag_debug (bool, optional): Flag to enable debug mode. Defaults to
             False.
@@ -253,16 +254,16 @@ def compute_muaps_similarity(
     """Compute the similarity between two MUAPs.
 
     Args:
-        muap1 (np.ndarray): First motor unit action potential with shape 
+        muap1 (np.ndarray): First motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        muap2 (np.ndarray): Second motor unit action potential with shape 
+        muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        sel_chs_by (str, optional): Method for selecting significant amplitude 
+        sel_chs_by (str, optional): Method for selecting significant amplitude
             channels. Defaults to "iqr".
         metric (str, optional): Similarity metric to compute. Defaults to "nmse".
 
     Returns:
-        Tuple[float, int]: The similarity between the two MUAPs and the 
+        Tuple[float, int]: The similarity between the two MUAPs and the
             alignment lag.
     """
     # Get significant amplitude channels
@@ -319,16 +320,16 @@ def compute_muaps_dist(
     """Compute the distance between two MUAPs.
 
     Args:
-        muap1 (np.ndarray): First motor unit action potential with shape 
+        muap1 (np.ndarray): First motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        muap2 (np.ndarray): Second motor unit action potential with shape 
+        muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        sel_chs_by (str, optional): Method for selecting significant amplitude 
+        sel_chs_by (str, optional): Method for selecting significant amplitude
             channels. Defaults to "iqr".
         metric (str, optional): Distance metric to compute. Defaults to "nmse".
 
     Returns:
-        Tuple[float, int]: The distance between the two MUAPs and the 
+        Tuple[float, int]: The distance between the two MUAPs and the
             alignment lag.
     """
 
@@ -386,16 +387,16 @@ def compute_muaps_dist_sets(
     """Compute the distance between sets of MUAPs.
 
     Args:
-        muaps1 (np.ndarray): First set of motor unit action potentials with shape 
+        muaps1 (np.ndarray): First set of motor unit action potentials with shape
             (n_units1, ch_rows, ch_cols, samples).
-        muaps2 (np.ndarray): Second set of motor unit action potentials with shape 
+        muaps2 (np.ndarray): Second set of motor unit action potentials with shape
             (n_units2, ch_rows, ch_cols, samples).
         dist_metric (str, optional): Distance metric to compute. Defaults to "nmse".
-        sel_chs_method (str, optional): Method for selecting significant amplitude 
+        sel_chs_method (str, optional): Method for selecting significant amplitude
             channels. Defaults to "iqr".
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]: The distance matrix between the two sets of 
+        Tuple[np.ndarray, np.ndarray]: The distance matrix between the two sets of
             MUAPs and the alignment lag matrix.
     """
 
@@ -447,14 +448,14 @@ def compute_all_muaps_dist(
     """Compute the distance between all pairs of MUAPs.
 
     Args:
-        muaps (np.ndarray): Motor unit action potentials with shape 
+        muaps (np.ndarray): Motor unit action potentials with shape
             (n_units, ch_rows, ch_cols, samples).
         dist_metric (str, optional): Distance metric to compute. Defaults to "nmse".
-        sel_chs_method (str, optional): Method for selecting significant amplitude 
+        sel_chs_method (str, optional): Method for selecting significant amplitude
             channels. Defaults to "iqr".
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]: The distance matrix between all pairs of MUAPs 
+        Tuple[np.ndarray, np.ndarray]: The distance matrix between all pairs of MUAPs
             and the alignment lag matrix.
     """
 
@@ -507,7 +508,7 @@ def cluster_muaps(
     cluster_method: Optional[str] = "ward",
     dist_metric: Optional[str] = "corr",
     sel_chs_method: Optional[str] = "max_abs",
-    thr_vals: Optional[np.ndarray] = np.arange(0, 2.0001, 0.001),
+    thr_vals: Optional[np.ndarray] = np.arange(0, 2.0001, 0.001),  # noqa: B008 (read-only)
     flag_plot: Optional[bool] = True,
 ) -> Tuple[pd.DataFrame, Dict[str, np.ndarray]]:
     """Cluster MUAPs based on distance matrix.
@@ -559,14 +560,14 @@ def cluster_muaps(
         "dist_metric": dist_metric,
         "sel_chs_method": sel_chs_method,
         "labels": np.empty((len(thr_vals), n_units)),
-        "n_clusters": np.empty((len(thr_vals))),
-        "sil": np.empty((len(thr_vals))),
-        "chi": np.empty((len(thr_vals))),
-        "dbi": np.empty((len(thr_vals))),
-        "w_dist_mean": np.empty((len(thr_vals))),
-        "w_dist_std": np.empty((len(thr_vals))),
-        "b_dist_mean": np.empty((len(thr_vals))),
-        "b_dist_std": np.empty((len(thr_vals))),
+        "n_clusters": np.empty(len(thr_vals)),
+        "sil": np.empty(len(thr_vals)),
+        "chi": np.empty(len(thr_vals)),
+        "dbi": np.empty(len(thr_vals)),
+        "w_dist_mean": np.empty(len(thr_vals)),
+        "w_dist_std": np.empty(len(thr_vals)),
+        "b_dist_mean": np.empty(len(thr_vals)),
+        "b_dist_std": np.empty(len(thr_vals)),
     }
 
     for i, thr in enumerate(thr_vals):
@@ -666,8 +667,8 @@ def cluster_muaps(
             leaf_font_size=12,
         )
         axs[0].set_title(
-            f"{cluster_method}" + 
-            f"max sil = {opt_thr_info['opt_sil'].values[0]:.3f}, " + 
+            f"{cluster_method}" +
+            f"max sil = {opt_thr_info['opt_sil'].values[0]:.3f}, " +
             f"thr = {opt_thr_info['opt_thr'].values[0]:.3f}"
         )
         axs[0].set_xlabel("Motor units")
@@ -976,12 +977,12 @@ def assign_muaps_across_seq_trials(
         dist_mat (np.ndarray): The distance matrix.
         trial_labels (np.ndarray): All trial labels.
         trial_set (List[int]): The trial labels present in the distance matrix.
-        assign_method (str, optional): The method to use for assignment. 
+        assign_method (str, optional): The method to use for assignment.
             Defaults to "hungarian".
         dist_thr (float, optional): The distance threshold. Defaults to 0.3.
 
     Returns:
-        Tuple[Dict[str, List], nx.DiGraph, np.ndarray]: A tuple containing the 
+        Tuple[Dict[str, List], nx.DiGraph, np.ndarray]: A tuple containing the
             output dictionary, the graph, and the updated distance matrix.
     """
 
@@ -1049,16 +1050,16 @@ def assign_muaps_all_trials(
         muaps (np.ndarray): MUAPs with shape (units, ch_rows, ch_cols, samples).
         trial_labels (np.ndarray): All trial labels.
         trial_set (List[int]): The trial labels of the MUAPs.
-        assign_method (str, optional): The method to use for assignment. 
+        assign_method (str, optional): The method to use for assignment.
             Defaults to "hungarian".
         dist_metric (str, optional): The distance metric. Defaults to "nmse".
         dist_thr (float, optional): The distance threshold. Defaults to 0.3.
-        sel_chs_method (str, optional): The method to use for selecting channels. 
+        sel_chs_method (str, optional): The method to use for selecting channels.
             Defaults to "iqr".
 
     Returns:
-        Tuple[List[int], List[List[int]], pd.DataFrame, nx.DiGraph]: A tuple 
-            containing the group labels, group sets, link information dataframe, 
+        Tuple[List[int], List[List[int]], pd.DataFrame, nx.DiGraph]: A tuple
+            containing the group labels, group sets, link information dataframe,
             and the graph.
     """
 
