@@ -544,9 +544,8 @@ def center_muaps(muaps: np.ndarray) -> np.ndarray:
         for unit in range(units):
             # Get current muap and peak amplitude channel
             muap = muaps[unit]
-            ch_row, ch_col = np.unravel_index(
-                np.nanargmax(np.abs(muap), axis=-1), (rows, cols)
-                )
+            peak_amps = np.nanmax(np.abs(muap), axis=-1)
+            ch_row, ch_col = np.unravel_index(np.nanargmax(peak_amps), (rows, cols))
 
             #  Get the sample at which the amplitude is max
             max_sample = np.nanargmax(np.abs(muap[ch_row, ch_col]))
