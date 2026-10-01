@@ -252,8 +252,9 @@ def plot_clustered_muaps(
         color_labels (np.ndarray): Array of color labels for each MUAP.
         fs (Optional[int], optional): Sampling frequency in Hz. Defaults to
             2048.
-        ax (Optional[plt.Axes], optional): Axes object to plot on. Defaults to
-            None.
+        ax (Optional[plt.Axes], optional): Axes to plot on, one per cluster
+            (a single Axes is only valid for one cluster). If None, a new
+            figure with one row per cluster is created. Defaults to None.
         palette_name (Optional[str], optional): Name of the color palette.
             Defaults to "viridis".
         color_order (Optional[list], optional): Order of color labels in the
@@ -300,7 +301,11 @@ def plot_clustered_muaps(
         _, ax = plt.subplots(n_clusters, 1, figsize=(10, 4 * n_clusters))
         ax = np.ravel(ax)
     else:
-        ax = np.expand_dims(ax, axis=0)
+        ax = np.ravel(ax)
+        if len(ax) < n_clusters:
+            raise ValueError(
+                f"{n_clusters} clusters need {n_clusters} axes, got {len(ax)}."
+            )
 
     for c, cluster in enumerate(clusters):
 
@@ -338,7 +343,7 @@ def plot_clustered_muaps(
             elif ch_framed == "iqr_ptp":
                 curr_amp_ch = get_highest_iqr_ptp_ch(muaps_cluster[unit])
             elif ch_framed == "per":
-                curr_amp_ch = get_percentile_ch(muaps_plot[unit], thr=95)
+                curr_amp_ch = get_percentile_ch(muaps_cluster[unit], thr=95)
 
             for col in range(cols):
                 # Apply offset to signals
@@ -353,7 +358,7 @@ def plot_clustered_muaps(
                     curr_label = cluster_color_labels[unit]
                 else:
                     curr_label = None
-                ax[c - 1].plot(
+                ax[c].plot(
                     curr_x,
                     curr_muap_col,
                     color=color_dict[cluster_color_labels[unit]],
@@ -378,12 +383,12 @@ def plot_clustered_muaps(
                 frame_collection = PatchCollection(
                     frames, ls="-", ec="lightgrey", fc="none", lw=1
                 )
-                ax[c - 1].add_collection(frame_collection)
+                ax[c].add_collection(frame_collection)
 
         # Add time reference
         time_y_ref = -y_offset * (rows) - y_offset / 10
-        ax[c - 1].plot([0, samples], [time_y_ref, time_y_ref], "-", color="black")
-        ax[c - 1].annotate(
+        ax[c].plot([0, samples], [time_y_ref, time_y_ref], "-", color="black")
+        ax[c].annotate(
             f"{samples/fs*1000:.0f} ms",
             xy=(samples / 2, time_y_ref),
             xytext=(0, time_y_ref + y_offset / 10),
@@ -393,18 +398,18 @@ def plot_clustered_muaps(
         amp_x_ref = (samples + x_offset) * 2
         max_ptp = np.nanmax(np.ptp(muaps_cluster, axis=-1))
         amp_y_ref = [-max_ptp / 2, max_ptp / 2] - y_offset * rows - y_offset / 10
-        ax[c - 1].plot([amp_x_ref, amp_x_ref], amp_y_ref, "-", color="black")
-        ax[c - 1].annotate(
+        ax[c].plot([amp_x_ref, amp_x_ref], amp_y_ref, "-", color="black")
+        ax[c].annotate(
             f"{np.nanmax(np.ptp(muaps[cluster_idx], axis=-1)):.2f} mV",
             xy=(amp_x_ref, np.mean(amp_y_ref)),
             xytext=(amp_x_ref * 1.1, np.mean(amp_y_ref)),
         )
 
         # Remove axes
-        ax[c - 1].set_xlim([-x_offset, (x_offset + samples) * cols])
-        ax[c - 1].set_ylim([-y_offset * (rows + 1), y_offset])
-        ax[c - 1].set_title(f"Cluster: {cluster}")
-        legend_without_duplicate_labels(ax[c - 1])
-        ax[c - 1].set_axis_off()
+        ax[c].set_xlim([-x_offset, (x_offset + samples) * cols])
+        ax[c].set_ylim([-y_offset * (rows + 1), y_offset])
+        ax[c].set_title(f"Cluster: {cluster}")
+        legend_without_duplicate_labels(ax[c])
+        ax[c].set_axis_off()
 
     return ax

@@ -886,14 +886,16 @@ def generate_group_labels(group_sets: List[List[int]]) -> List[int]:
 
     Args:
         group_sets (List): A list of group sets, where each group set is a list of
-            unit indices.
+            unit indices. Unit indices must be 0-based and cover every unit
+            (0 to n_units - 1), as produced by generate_group_sets.
 
     Returns:
-        (List): A list of group labels, where each label corresponds to a unit index.
+        (List): A list of group labels (starting at 1), where each label
+            corresponds to a unit index.
 
     Example:
-        >>> generate_group_labels([[1, 2, 3, 4]])
-        [1, 1, 1, 1]
+        >>> generate_group_labels([[0, 2, 3], [1]])
+        [1, 2, 1, 1]
     """
     units = len(np.concatenate(group_sets))
     groups = np.zeros(units).astype(int)

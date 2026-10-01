@@ -853,12 +853,12 @@ def get_muap_peak_frequency(
     """
     # Check muaps size
     if len(muaps.shape) < 4:
-        muaps = np.abs(np.expand_dims(muaps, axis=0))
+        muaps = np.expand_dims(muaps, axis=0)
 
     # Compute power spectrum for each muap channel
     units, rows, cols, samples = muaps.shape
     ps = np.power(
-        np.abs(np.fft.fft(muaps, n=samples, axis=-1).real), 2
+        np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2
         )[:, :, :, :samples//2]
     freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
     max_ps_idx = np.argmax(ps, axis=-1)
@@ -888,7 +888,7 @@ def get_muap_peak_frequency(
     for unit, row, col in itertools.product(
             range(units), range(rows), range(cols)
             ):
-        if sel_chs_mask[row, col] is False:
+        if not sel_chs_mask[row, col]:
             continue
         peak_freq[unit, row, col] = freq[max_ps_idx[unit, row, col]]
 
@@ -927,12 +927,12 @@ def get_muap_median_frequency(
 
     # Check muaps size
     if len(muaps.shape) < 4:
-        muaps = np.abs(np.expand_dims(muaps, axis=0))
+        muaps = np.expand_dims(muaps, axis=0)
 
     # Compute power spectrum for each muap channel
     units, rows, cols, samples = muaps.shape
     ps = np.power(
-        np.abs(np.fft.fft(muaps, n=samples, axis=-1).real), 2
+        np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2
         )[:, :, :, :samples//2]
     freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
 
@@ -965,7 +965,7 @@ def get_muap_median_frequency(
     for unit, row, col in itertools.product(
             range(units), range(rows), range(cols)
             ):
-        if sel_chs_mask[row, col] is False:
+        if not sel_chs_mask[row, col]:
             continue
         med_freq[unit, row, col] = freq[np.argmin(np.abs(
             cum_ps[unit, row, col] -
@@ -1006,12 +1006,12 @@ def get_muap_mean_frequency(
 
     # Check muaps size
     if len(muaps.shape) < 4:
-        muaps = np.abs(np.expand_dims(muaps, axis=0))
+        muaps = np.expand_dims(muaps, axis=0)
 
     # Compute power spectrum for each muap channel
     units, _, _, samples = muaps.shape
     ps = np.power(
-            np.abs(np.fft.fft(muaps, n=samples, axis=-1).real), 2
+            np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2
             )[:, :, :, :samples//2]
     freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
 
