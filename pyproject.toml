@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "motor_unit_toolbox"
-version = "1.0"
+version = "1.1.0"
 description = "motor_unit_toolbox is a package to analyse motor units"
 authors = [
     {name = "Irene Mendez Guerra"}
