@@ -4,6 +4,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/motor-unit-toolbox)](https://pypi.org/project/motor-unit-toolbox/)
 [![CI](https://github.com/imendezguerra/motor_unit_toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/imendezguerra/motor_unit_toolbox/actions/workflows/ci.yml)
 [![Docs](https://github.com/imendezguerra/motor_unit_toolbox/actions/workflows/docs.yml/badge.svg)](https://imendezguerra.github.io/motor_unit_toolbox/)
+[![DOI](https://zenodo.org/badge/826883406.svg)](https://doi.org/10.5281/zenodo.23128316)
 
 ## Overview
 <!-- --8<-- [start:overview] -->
