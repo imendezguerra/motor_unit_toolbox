@@ -25,5 +25,5 @@ def test_round_trip(signal_length, data):
     ]
     recovered = binary_to_firings(firings_to_binary(firings, signal_length))
     assert len(recovered) == n_units
-    for orig, rec in zip(firings, recovered):
+    for orig, rec in zip(firings, recovered, strict=True):
         np.testing.assert_array_equal(orig, rec)

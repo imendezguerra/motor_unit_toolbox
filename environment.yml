@@ -1,19 +1,10 @@
+# Development environment. Dependencies are listed once, in pyproject.toml;
+# this installs the toolbox in editable mode with the dev and docs extras.
 name: motor_unit_toolbox
 channels:
   - conda-forge
-  - defaults
 dependencies:
-  - python>=3.9
-  - numpy
-  - scikit-learn
-  - scipy
-  - pandas
-  - matplotlib
-  - seaborn
-  - pytest
-  - pytest-cov
-  - hypothesis
+  - python=3.12  # same as the CI lint, build and docs jobs; the test matrix covers 3.10-3.14
   - pip
   - pip:
-      - networkx
-      - easydict
+      - "-e .[dev,docs]"

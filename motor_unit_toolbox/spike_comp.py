@@ -436,7 +436,7 @@ def rate_of_agreement_all(
 
     Args:
         spike_trains (np.ndarray): Test spike trains with shape (m, n), where m
-          is the number of samples and n is the number of motor units.
+            is the number of samples and n is the number of motor units.
         fs (Optional[int], optional): Sampling frequency in Hz. Defaults to 2048.
         tol_spike_ms (Optional[int], optional): Spike tolerance in milliseconds.
             Defaults to 1.

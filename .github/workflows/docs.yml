@@ -1,0 +1,61 @@
+# Documentation: built on every PR and push to main (to catch errors),
+# deployed to GitHub Pages only on a release, so the site always matches the latest PyPI version.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install package with docs extras
+        run: python -m pip install -e ".[docs]"
+      - name: Build site
+        run: mkdocs build --strict
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        with:
+          path: site/
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+      - id: deployment
+        uses: actions/deploy-pages@v5

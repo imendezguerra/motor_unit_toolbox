@@ -157,15 +157,8 @@ def get_coefficient_of_variation(
             greater than value in s are discarded as considered silent period.
 
     Returns:
-        np.ndarray: Array of CoV values for each motor unit, scaled by 100.
+        np.ndarray: Array of CoV values for each motor unit between 0 and 1.
 
-    Notes:
-        - The CoV is calculated as the standard deviation of the interspike
-          intervals divided by the mean interspike interval.
-        - Interspike intervals greater than 0.25 s (or discharge rate less than
-          4 Hz) are discarded, based on "Negro F (2016). Multi-channel
-          intramuscular and surface EMG decomposition by convolutive blind
-          source separation."
     """
     # Function implementation
     spike_train = _check_mu_format(spike_train.astype(bool))
@@ -193,18 +186,18 @@ def get_pulse_to_noise_ratio(
     ) -> np.ndarray:
     """Compute the pulse-to-noise ratio (PNR) for each motor unit.
 
-    Args:
-    spike_train (np.ndarray): Binary spike train matrix of shape (n, m),
-        where n is the number of time points and m is the number of motor
-        units.
-    ipts (np.ndarray): Innervated pulse trains (IPTs) with shape (n, m),
-        where n is the number of time points and m is the number of motor
-        units.
-    ext_fact (int, optional): Extension factor to discard initial spikes.
-        Defaults to 8.
+    Parameters:
+        spike_train (np.ndarray): Binary spike train matrix of shape (n, m),
+            where n is the number of time points and m is the number of motor
+            units.
+        ipts (np.ndarray): Innervated pulse trains (IPTs) with shape (n, m),
+            where n is the number of time points and m is the number of motor
+            units.
+        ext_fact (int, optional): Extension factor to discard initial spikes.
+            Defaults to 8.
 
     Returns:
-    np.ndarray: Array of PNR values for each motor unit.
+        np.ndarray: Array of PNR values for each motor unit.
 
     Notes:
     - The PNR is calculated as 20 * log10(spikes_mean / baseline_mean),
@@ -275,7 +268,7 @@ def get_silhouette_measure(
         spike_train (np.ndarray): Binary spike train matrix of shape (n, m),
             where n is the number of time points and m is the number of motor
             units.
-        ips (np.ndarray): Innervated pulse trains (IPTs) with shape (n, m),
+        ipts (np.ndarray): Innervation pulse trains (IPTs) with shape (n, m),
             where n is the number of time points and m is the number of motor
             units.
         ext_fact (int, optional): Extension factor to discard initial spikes.

@@ -1,0 +1,4 @@
+# Extra files for the source distribution (sdist). The wheel only contains the package.
+include CITATION.cff
+graft tests
+global-exclude *.py[cod] __pycache__
