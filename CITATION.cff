@@ -9,7 +9,7 @@ abstract: >-
   Python functions to analyse motor unit behaviour: firing and motor unit
   action potential (MUAP) properties, spike train comparison, and MUAP tracking.
 version: 1.2.0
-# doi: TODO add the Zenodo DOI after the first archived release
+doi: https://doi.org/10.5281/zenodo.23128317
 date-released: 2026-10-04
 license: MIT
 url: "https://imendezguerra.github.io/motor_unit_toolbox/"
