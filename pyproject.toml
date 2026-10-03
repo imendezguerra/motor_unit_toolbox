@@ -4,23 +4,37 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "motor_unit_toolbox"
-version = "1.1.0"
-description = "motor_unit_toolbox is a package to analyse motor units"
+dynamic = ["version"]
+description = "Analyse motor unit firing behaviour and action potentials from decomposed EMG"
 authors = [
-    {name = "Irene Mendez Guerra"}
+    {name = "Irene Mendez Guerra", email = "irene.mendez17@imperial.ac.uk"}
 ]
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
+keywords = [
+    "motor unit",
+    "motor neuron",
+    "MUAP",
+    "EMG",
+    "spike train",
+    "decomposition",
+    "MUAP tracking",
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.22",
     "scikit-learn>=1.0",
@@ -32,6 +46,13 @@ dependencies = [
     "easydict>=1.9"
 ]
 
+[project.urls]
+Homepage = "https://imendezguerra.github.io/motor_unit_toolbox/"
+Documentation = "https://imendezguerra.github.io/motor_unit_toolbox/"
+Source = "https://github.com/imendezguerra/motor_unit_toolbox"
+Issues = "https://github.com/imendezguerra/motor_unit_toolbox/issues"
+Changelog = "https://github.com/imendezguerra/motor_unit_toolbox/releases"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7",
@@ -40,9 +61,17 @@ dev = [
     "ruff>=0.6",
     "pre-commit>=3",
 ]
+docs = [
+    "mkdocs>=1.6,<2",  # MkDocs 2.0 removes the plugin system that mkdocstrings needs
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
 
 [tool.setuptools.packages.find]
 include = ["motor_unit_toolbox", "motor_unit_toolbox.*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "motor_unit_toolbox.__version__"}
 
 # ---------------------------------------------------------------------------
 # pytest
@@ -61,7 +90,7 @@ filterwarnings = [
     # Third-party deprecations we cannot act on
     "ignore::DeprecationWarning:seaborn.*",
     "ignore::DeprecationWarning:dateutil.*",
-    # pyparsing>=3.3 deprecates camelCase names still used by matplotlib<3.10 (py3.9)
+    # pyparsing>=3.3 deprecates camelCase names still used by matplotlib<3.10 (minimum-deps job)
     "ignore:.* deprecated - use .*:DeprecationWarning:matplotlib.*",
     # seaborn 0.11 compares versions with distutils LooseVersion (minimum-deps job)
     "ignore:distutils Version classes are deprecated:DeprecationWarning",
@@ -90,7 +119,7 @@ exclude_also = [
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 extend-exclude = ["*.egg-info"]
 
 [tool.ruff.lint]

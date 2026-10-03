@@ -225,9 +225,9 @@ def legend_without_duplicate_labels(ax: plt.Axes) -> None:
     """
     handles, labels = ax.get_legend_handles_labels()
     unique = [
-        (h, lab) for i, (h, lab) in enumerate(zip(handles, labels)) if lab not in labels[:i]
+        (h, lab) for i, (h, lab) in enumerate(zip(handles, labels, strict=True)) if lab not in labels[:i]
     ]
-    ax.legend(*zip(*unique), bbox_to_anchor=(1.2, 1))
+    ax.legend(*zip(*unique, strict=True), bbox_to_anchor=(1.2, 1))
 
 
 def plot_clustered_muaps(

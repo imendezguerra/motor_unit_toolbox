@@ -61,8 +61,15 @@ def test_nfd(rng):
 
 def test_alignment_recovers_shift(muap):
     shifted = np.roll(muap, -3, axis=-1)
-    lag = mc.get_alignmnent(muap, shifted)
+    lag = mc.get_alignment(muap, shifted)
     np.testing.assert_allclose(np.roll(shifted, lag, axis=-1), muap, atol=1e-12)
+
+
+def test_misspelled_alignment_alias_is_deprecated(muap):
+    shifted = np.roll(muap, -3, axis=-1)
+    with pytest.warns(DeprecationWarning, match="get_alignment"):
+        lag = mc.get_alignmnent(muap, shifted)
+    assert lag == mc.get_alignment(muap, shifted)
 
 
 @pytest.mark.parametrize("metric", DIST_METRICS)
@@ -153,7 +160,7 @@ def test_assign_muaps_across_seq_trials():
     out, graph, dist_out = mc.assign_muaps_across_seq_trials(
         dist.copy(), trial_labels, trial_set=[0, 1, 2], dist_thr=0.3
     )
-    assert sorted(zip(out.unit1, out.unit2)) == [(0, 3), (1, 2), (2, 5), (3, 4)]
+    assert sorted(zip(out.unit1, out.unit2, strict=True)) == [(0, 3), (1, 2), (2, 5), (3, 4)]
     assert sorted(map(sorted, mc.generate_group_sets(graph))) == [[0, 3, 4], [1, 2, 5]]
     assert dist_out[0, 3] == 2  # explored blocks are masked
 
@@ -178,11 +185,31 @@ def test_assign_muaps_all_trials(assign_method, muaps):
 # ---------------------------------------------------------------------------
 
 
+def test_mask_within_trial_dist():
+    dist = np.array([
+        [0.0, 0.1, 0.2, 0.3],
+        [0.1, 0.0, 0.4, 0.5],
+        [0.2, 0.4, 0.0, 0.6],
+        [0.3, 0.5, 0.6, 0.0],
+    ])
+    dist_before = dist.copy()
+
+    masked = mc.mask_within_trial_dist(dist, np.array([0, 0, 1, 1]), fill_value=9)
+
+    expected = dist.copy()
+    expected[0, 1] = expected[1, 0] = expected[2, 3] = expected[3, 2] = 9
+    np.testing.assert_array_equal(masked, expected)
+    np.testing.assert_array_equal(dist, dist_before)  # input untouched
+    # Default fill value: 1 + the largest distance
+    assert mc.mask_within_trial_dist(dist, [0, 0, 1, 1])[0, 1] == pytest.approx(1.6)
+
+
+def test_mask_within_trial_dist_rejects_wrong_length():
+    with pytest.raises(ValueError, match="trial_labels"):
+        mc.mask_within_trial_dist(np.zeros((3, 3)), np.array([0, 1]))
+
+
 @pytest.mark.slow
-# At thresholds where every unit falls into one cluster the between-cluster
-# block is empty, so nanmean/nanstd warn and return NaN (expected)
-@pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
-@pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0:RuntimeWarning")
 def test_cluster_muaps(muaps):
     family = np.stack([muaps[0], 1.1 * muaps[0], 0.9 * muaps[0], muaps[1], 1.2 * muaps[1], 0.8 * muaps[1]])
     dist, _ = mc.compute_all_muaps_dist(family, dist_metric="corr")
@@ -195,3 +222,48 @@ def test_cluster_muaps(muaps):
     assert len(set(labels[:3])) == len(set(labels[3:])) == 1
     assert labels[0] != labels[3]
     np.testing.assert_array_equal(dist, dist_before)  # diagonal restored after use
+
+
+@pytest.fixture
+def same_trial_duplicates(muaps):
+    """Two families of identical-shape MUAPs, each with a duplicate inside trial 0 or 1."""
+    family = np.stack([muaps[0], 1.1 * muaps[0], 0.9 * muaps[0], muaps[1], 1.2 * muaps[1], 0.8 * muaps[1]])
+    dist, _ = mc.compute_all_muaps_dist(family, dist_metric="corr")
+    trial_labels = np.array([0, 0, 1, 0, 1, 1])  # units 0-1 and 4-5 share a trial
+    return dist, trial_labels
+
+
+@pytest.mark.slow
+def test_cluster_muaps_complete_linkage_keeps_trials_apart(same_trial_duplicates):
+    dist, trial_labels = same_trial_duplicates
+    dist_before = dist.copy()
+
+    # Any warning fails the test (filterwarnings = error), so this also checks none is raised
+    opt, out = mc.cluster_muaps(
+        dist, cluster_method="complete", thr_vals=np.arange(0.05, 2.0, 0.05),
+        flag_plot=False, trial_labels=trial_labels,
+    )
+
+    labels = out["labels"][opt["opt_idx"].iloc[0]]
+    for cluster in np.unique(labels):
+        cluster_trials = trial_labels[labels == cluster]
+        assert len(cluster_trials) == len(set(cluster_trials))
+    np.testing.assert_array_equal(dist, dist_before)
+
+
+@pytest.mark.slow
+def test_cluster_muaps_warns_when_same_trial_units_merge(same_trial_duplicates):
+    dist, trial_labels = same_trial_duplicates
+
+    # Single linkage merges through a unit of another trial despite the masking
+    with pytest.warns(UserWarning, match=r"units from the same trial") as record:
+        mc.cluster_muaps(
+            dist, cluster_method="single", thr_vals=np.arange(0.05, 2.0, 0.05),
+            flag_plot=False, trial_labels=trial_labels,
+        )
+
+    message = str(record[0].message)
+    assert "At the selected threshold" in message
+    assert "units [0, 1] (trial 0)" in message
+    assert "units [4, 5] (trial 1)" in message
+    assert "cluster " in message

@@ -5,7 +5,19 @@ authors:
   given-names: "Irene"
   orcid: "https://orcid.org/0000-0001-7361-4618"
 title: "Motor Unit Toolbox"
-version: 1.1.0
-# doi: tbd
-# date-released: tbd
-url: "https://github.com/imendezguerra/motor_unit_toolbox"
+abstract: >-
+  Python functions to analyse motor unit behaviour: firing and motor unit
+  action potential (MUAP) properties, spike train comparison, and MUAP tracking.
+version: 1.2.0
+# doi: TODO add the Zenodo DOI after the first archived release
+# date-released: TODO set to the release date (YYYY-MM-DD) before tagging
+license: MIT
+url: "https://imendezguerra.github.io/motor_unit_toolbox/"
+repository-code: "https://github.com/imendezguerra/motor_unit_toolbox"
+keywords:
+  - motor unit
+  - EMG
+  - HD-EMG
+  - MUAP
+  - spike train
+  - decomposition

@@ -1,0 +1,68 @@
+site_name: Motor Unit Toolbox
+site_description: Analyse motor unit firing behaviour and action potentials from decomposed EMG
+site_url: https://imendezguerra.github.io/motor_unit_toolbox/
+repo_url: https://github.com/imendezguerra/motor_unit_toolbox
+repo_name: imendezguerra/motor_unit_toolbox
+edit_uri: edit/main/docs/
+
+# Files outside docs/ that `mkdocs serve` should also live-reload on
+watch:
+  - README.md
+  - motor_unit_toolbox
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - API reference:
+      - props: api/props.md
+      - spike_comp: api/spike_comp.md
+      - muap_comp: api/muap_comp.md
+      - plots: api/plots.md
+      - utils: api/utils.md
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      # Shared text lives in README.md (also the PyPI page) and is pulled in by section
+      base_path: ["."]
+      check_paths: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            members_order: source
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            separate_signature: true
+            heading_level: 1
+            filters:
+              - "!^_"              # private helpers
+              - "!^get_alignmnent$" # deprecated misspelled alias of get_alignment

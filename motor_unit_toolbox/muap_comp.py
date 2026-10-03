@@ -1,6 +1,7 @@
 """Functions to compute MUAP similarity and distance metrics"""
 
 import itertools
+import warnings
 from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
 import matplotlib.pyplot as plt
@@ -37,7 +38,7 @@ def get_highest_iqr_ch(muap: np.ndarray) -> np.ndarray:
 def get_percentile_ch(
     muap: np.ndarray,
     thr: Optional[int] = 90
-):
+) -> np.ndarray:
     """Compute the channels that exceed a certain percentile threshold.
 
     Args:
@@ -175,7 +176,7 @@ def norm_farina_distance(muap1: np.ndarray, muap2: np.ndarray) -> float:
     return muaps_nfd
 
 
-def get_alignmnent(
+def get_alignment(
         muap1: np.ndarray,
         muap2: np.ndarray,
         flag_debug: Optional[bool] = False
@@ -245,6 +246,23 @@ def get_alignmnent(
     return muaps_lag
 
 
+def get_alignmnent(
+        muap1: np.ndarray,
+        muap2: np.ndarray,
+        flag_debug: Optional[bool] = False
+        ) -> int:
+    """Deprecated misspelling of `get_alignment`, kept for backwards compatibility.
+
+    Will be removed in version 2.0.
+    """
+    warnings.warn(
+        "get_alignmnent is deprecated and will be removed in 2.0; use get_alignment instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_alignment(muap1, muap2, flag_debug=flag_debug)
+
+
 def compute_muaps_similarity(
     muap1: np.ndarray,
     muap2: np.ndarray,
@@ -296,7 +314,7 @@ def compute_muaps_similarity(
     muap2_sel = np.array(muap2[sel_chs])
 
     # Align signals based on the selected channels
-    muaps_lag = get_alignmnent(muap1_sel, muap2_sel)
+    muaps_lag = get_alignment(muap1_sel, muap2_sel)
     muap2_sel = np.roll(muap2_sel, muaps_lag, axis=-1)
 
     # Compute metric
@@ -366,7 +384,7 @@ def compute_muaps_dist(
     muap2_sel = np.array(muap2[sel_chs])
 
     # Align signals based on the selected channels
-    muaps_lag = get_alignmnent(muap1_sel, muap2_sel)
+    muaps_lag = get_alignment(muap1_sel, muap2_sel)
     muap2_sel = np.roll(muap2_sel, muaps_lag, axis=-1)
 
     # Compute metric
@@ -509,15 +527,92 @@ def compute_all_muaps_dist(
     return all_muaps_dist, all_muaps_lags.astype(int)
 
 
+def mask_within_trial_dist(
+    all_muaps_dist: np.ndarray,
+    trial_labels: np.ndarray,
+    fill_value: Optional[float] = None,
+) -> np.ndarray:
+    """Set the distance between different MUAPs of the same trial to a large value.
+
+    Units identified in the same trial that are different motor units, should
+    not be matched together. The diagonal (each unit with itself) is left at 0.
+
+    Args:
+        all_muaps_dist (np.ndarray): Distance matrix between all pairs of MUAPs
+            with shape (n_units, n_units).
+        trial_labels (np.ndarray): Trial label of each MUAP, with shape (n_units).
+        fill_value (float, optional): Distance assigned to pairs from the same
+            trial. Defaults to 1 + the largest distance in the matrix.
+
+    Returns:
+        np.ndarray: A masked copy of the distance matrix. The input is not modified.
+    """
+    trial_labels = np.asarray(trial_labels)
+    if trial_labels.shape != (all_muaps_dist.shape[0],):
+        raise ValueError(
+            f"trial_labels has shape {trial_labels.shape}, expected "
+            f"({all_muaps_dist.shape[0]},) to match the distance matrix."
+        )
+    if fill_value is None:
+        fill_value = np.nanmax(all_muaps_dist) + 1
+
+    same_trial = trial_labels[:, None] == trial_labels[None, :]
+    np.fill_diagonal(same_trial, False)
+
+    masked_dist = np.array(all_muaps_dist, dtype=float)
+    masked_dist[same_trial] = fill_value
+    return masked_dist
+
+
+def _nanmean_or_nan(values: np.ndarray) -> float:
+    """np.nanmean, returning NaN without a RuntimeWarning when there is nothing to average."""
+    values = np.asarray(values)
+    return np.nanmean(values) if np.any(~np.isnan(values)) else np.nan
+
+
+def _nanstd_or_nan(values: np.ndarray) -> float:
+    """np.nanstd, returning NaN without a RuntimeWarning when there is nothing to average."""
+    values = np.asarray(values)
+    return np.nanstd(values) if np.any(~np.isnan(values)) else np.nan
+
+
+def _warn_same_trial_clusters(
+    labels: np.ndarray, trial_labels: np.ndarray, thr: float
+) -> None:
+    """Warn about clusters that contain more than one unit from the same trial."""
+    conflicts = []
+    for curr_cluster in np.unique(labels):
+        cluster_units = np.nonzero(labels == curr_cluster)[0]
+        cluster_trials = trial_labels[cluster_units]
+        for trial in np.unique(cluster_trials):
+            trial_units = cluster_units[cluster_trials == trial]
+            if len(trial_units) > 1:
+                conflicts.append(
+                    f"cluster {int(curr_cluster)}: units {trial_units.tolist()} "
+                    f"(trial {trial})"
+                )
+
+    if conflicts:
+        warnings.warn(
+            f"At the selected threshold {thr:.3f}, units from the same trial were "
+            "merged into the same cluster: " + "; ".join(conflicts) + ". "
+            "Use cluster_method='complete' to keep units from the same trial apart.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
 def cluster_muaps(
     all_muaps_dist: np.ndarray,
     cluster_method: Literal[
         "single", "complete", "average", "weighted", "centroid", "median", "ward"
     ] = "ward",
     dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "corr",
-    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "max_abs",
+    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr_ptp",
     thr_vals: Optional[np.ndarray] = np.arange(0, 2.0001, 0.001),  # noqa: B008 (read-only)
     flag_plot: Optional[bool] = True,
+    *,
+    trial_labels: Optional[np.ndarray] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, np.ndarray]]:
     """Cluster MUAPs based on distance matrix.
 
@@ -528,10 +623,17 @@ def cluster_muaps(
         dist_metric (str, optional): Distance metric used to build
             all_muaps_dist (stored in the output only). Defaults to "corr".
         sel_chs_method (str, optional): Channel selection method used to
-            build all_muaps_dist (stored in the output only). Defaults to "max_abs".
+            build all_muaps_dist (stored in the output only). Defaults to "iqr_ptp".
         thr_vals (np.ndarray, optional): Threshold values for clustering. Defaults to
             np.arange(0, 2.0001, 0.001).
         flag_plot (bool, optional): Flag to plot clustering metrics. Defaults to True.
+        trial_labels (np.ndarray, optional): Trial label of each MUAP, with shape
+            (n_units). If given, MUAPs from the same trial are made maximally distant
+            before clustering (see `mask_within_trial_dist`), so they are not grouped
+            together. Only "complete" linkage guarantees this; with other methods a
+            warning lists any same-trial units merged at the selected threshold.
+            The clustering metrics are always computed on the original distances.
+            Defaults to None (no trial constraint).
 
     Returns:
         Tuple[pd.DataFrame, Dict[str, np.ndarray]]: Optimal threshold information and
@@ -558,8 +660,18 @@ def cluster_muaps(
     # Initialise variables
     n_units = all_muaps_dist.shape[0]
 
+    # Keep units from the same trial apart (only affects the linkage, not the metrics)
+    link_dist = all_muaps_dist
+    if trial_labels is not None:
+        trial_labels = np.asarray(trial_labels)
+        link_dist = mask_within_trial_dist(
+            all_muaps_dist,
+            trial_labels,
+            fill_value=max(np.nanmax(all_muaps_dist), np.max(thr_vals)) + 1,
+        )
+
     # Transform distance from redundant form into condensed form
-    all_muaps_dist_cond = spatial.distance.squareform(all_muaps_dist)
+    all_muaps_dist_cond = spatial.distance.squareform(link_dist)
 
     # Build linkage between
     link = cluster.hierarchy.linkage(all_muaps_dist_cond, method=cluster_method)
@@ -618,31 +730,21 @@ def cluster_muaps(
         for curr_cluster in np.unique(cluster_out["labels"][i]):
             curr_cluster_mask = cluster_out["labels"][i] == curr_cluster
 
-            w_dist_mean.append(
-                np.nanmean(all_muaps_dist[np.ix_(curr_cluster_mask, curr_cluster_mask)])
-            )
-            w_dist_std.append(
-                np.nanstd(all_muaps_dist[np.ix_(curr_cluster_mask, curr_cluster_mask)])
-            )
-            b_dist_mean.append(
-                np.nanmean(
-                    all_muaps_dist[
-                        np.ix_(curr_cluster_mask, np.logical_not(curr_cluster_mask))
-                    ]
-                )
-            )
-            b_dist_std.append(
-                np.nanstd(
-                    all_muaps_dist[
-                        np.ix_(curr_cluster_mask, np.logical_not(curr_cluster_mask))
-                    ]
-                )
-            )
+            # Single-unit clusters have no within distances and a single cluster has
+            # no between distances: these are NaN (skipped quietly, not warned about)
+            within_dists = all_muaps_dist[np.ix_(curr_cluster_mask, curr_cluster_mask)]
+            between_dists = all_muaps_dist[
+                np.ix_(curr_cluster_mask, np.logical_not(curr_cluster_mask))
+            ]
+            w_dist_mean.append(_nanmean_or_nan(within_dists))
+            w_dist_std.append(_nanstd_or_nan(within_dists))
+            b_dist_mean.append(_nanmean_or_nan(between_dists))
+            b_dist_std.append(_nanstd_or_nan(between_dists))
 
-        cluster_out["w_dist_mean"][i] = np.nanmean(w_dist_mean)
-        cluster_out["w_dist_std"][i] = np.nanmean(w_dist_std)
-        cluster_out["b_dist_mean"][i] = np.nanmean(b_dist_mean)
-        cluster_out["b_dist_std"][i] = np.nanmean(b_dist_std)
+        cluster_out["w_dist_mean"][i] = _nanmean_or_nan(w_dist_mean)
+        cluster_out["w_dist_std"][i] = _nanmean_or_nan(w_dist_std)
+        cluster_out["b_dist_mean"][i] = _nanmean_or_nan(b_dist_mean)
+        cluster_out["b_dist_std"][i] = _nanmean_or_nan(b_dist_std)
 
         np.fill_diagonal(all_muaps_dist, 0)
 
@@ -651,6 +753,10 @@ def cluster_muaps(
     opt_thr = thr_vals[opt_sil_idx]
     opt_sil = cluster_out["sil"][opt_sil_idx]
     opt_n_clusters = cluster_out["n_clusters"][opt_sil_idx]
+
+    # Check the trial constraint held at the selected threshold
+    if trial_labels is not None:
+        _warn_same_trial_clusters(cluster_out["labels"][opt_sil_idx], trial_labels, opt_thr)
 
     # Store output in a dataframe
     opt_thr_info = pd.DataFrame(
@@ -765,7 +871,7 @@ def pairwise(iterable: Iterable) -> Iterable[Tuple]:
     """
     a, b = itertools.tee(iterable)
     next(b, None)
-    return zip(a, b)
+    return zip(a, b, strict=False)
 
 
 def mark_groups(
@@ -808,7 +914,7 @@ def mark_groups(
     if len(rows) < 1 or len(cols) < 1:
         return out_dict, graph
 
-    for row, col in zip(rows, cols):
+    for row, col in zip(rows, cols, strict=True):
         #  Get dist_mat values
         row_list, col_list = list(range(len(idx_i))), list(range(len(idx_j)))
         row_list.remove(row)
@@ -979,7 +1085,7 @@ def assign_muaps_across_seq_trials(
     dist_mat: np.ndarray,
     trial_labels: np.ndarray,
     trial_set: List[int],
-    assign_method: Literal["hungarian", "grid-search"] = "hungarian",
+    assign_method: Literal["hungarian", "grid-search"] = "grid-search",
     dist_thr: Optional[float] = 0.3
 ) -> Tuple[Dict[str, List], nx.DiGraph, np.ndarray]:
     """
@@ -990,7 +1096,7 @@ def assign_muaps_across_seq_trials(
         trial_labels (np.ndarray): All trial labels.
         trial_set (List[int]): The trial labels present in the distance matrix.
         assign_method (str, optional): The method to use for assignment:
-            "hungarian" or "grid-search". Defaults to "hungarian".
+            "hungarian" or "grid-search". Defaults to "grid-search".
         dist_thr (float, optional): The distance threshold. Defaults to 0.3.
 
     Returns:
@@ -1009,7 +1115,7 @@ def assign_muaps_across_seq_trials(
 
     #  Generate graph
     graph = nx.DiGraph()
-    for trial, layer in zip(trial_set, layers):
+    for trial, layer in zip(trial_set, layers, strict=True):
         graph.add_nodes_from(layer, layer=trial)
 
     # Find adjacent neighbours
@@ -1112,7 +1218,7 @@ def assign_muaps_all_trials(
 
     # Get the unique trial combinations to perform the hungarian algorithm
     distant_trials = [
-        (trial_labels[row], trial_labels[col]) for row, col in zip(rows, cols)
+        (trial_labels[row], trial_labels[col]) for row, col in zip(rows, cols, strict=True)
     ]
     trial_comb = list(dict.fromkeys(distant_trials))
 

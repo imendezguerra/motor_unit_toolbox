@@ -1,98 +1,104 @@
 # Motor Unit Toolbox
 
+[![PyPI](https://img.shields.io/pypi/v/motor-unit-toolbox)](https://pypi.org/project/motor-unit-toolbox/)
+[![Python versions](https://img.shields.io/pypi/pyversions/motor-unit-toolbox)](https://pypi.org/project/motor-unit-toolbox/)
 [![CI](https://github.com/imendezguerra/motor_unit_toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/imendezguerra/motor_unit_toolbox/actions/workflows/ci.yml)
+[![Docs](https://github.com/imendezguerra/motor_unit_toolbox/actions/workflows/docs.yml/badge.svg)](https://imendezguerra.github.io/motor_unit_toolbox/)
 
 ## Overview
-This repository contains functions to analyse motor unit (MU) behaviour, from computing basic firing and motor unit action potential (MUAP) properties, to comparing sets of spike trains and tracking MUAPs.
+<!-- --8<-- [start:overview] -->
+Motor Unit Toolbox is a Python package to analyse motor unit (MU) behaviour, from computing basic firing and motor unit action potential (MUAP) properties, to comparing sets of spike trains and tracking MUAPs.
+
+The package is composed of the following modules:
+
+- `props`: MU properties such as discharge rate, pulse to noise ratio, silhouette measure, and coefficient of variation of the interspike intervals, as well as MUAP features.
+- `spike_comp`: compare spike trains between paired or unpaired sets, as well as within sets. Main metrics are rate of agreement, precision, sensitivity, F1 score, true positives, false positives, and false negatives.
+- `muap_comp`: compare, cluster and track MUAPs within or across recordings.
+- `plots`: plot spike trains, MUAPs, and grouped MUAPs.
+- `utils`: convert between lists of firing times and binary spike train matrices.
+<!-- --8<-- [end:overview] -->
 
 ## Table of Contents
 - [Installation](#installation)
-- [Quick start](#quickstart)
-- [Running tests](#running-tests)
+- [Quick start](#quick-start)
+- [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
 - [Citation](#citation)
-- [Acknowledgments](#acknowledgments)
 - [Contact](#contact)
 
 ## Installation
-To set up the project locally do the following:
-
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/imendezguerra/motor_unit_toolbox.git
-    ```
-2. Navigate to the project directory:
-    ```sh
-    cd motor_unit_toolbox
-    ```
-3. Create the conda environment from the `environment.yml` file:
-    ```sh
-    conda env create -f environment.yml
-    ```
-4. Activate the environment:
-    ```sh
-    conda activate motor_unit_toolbox
-    ```
-5. Install toolbox:
-    ```
-    pip install -e .
-    ```
-
-## Quick start
-The package is composed of the following modules:
-- `muap_comp.py`: Functions to compare and track MUAPs.
-- `spike_comp.py`: Functions to compare spike trains between paired or unpaired sets, as well as within sets. Main metrics are rate of agreement, precision, sensitivity, F1 score, true positives, false positives, and false negatives.
-- `props.py`: Functions to extract MU properties such as discharge rate, pulse to noise ratio, silhouette measure, and coefficient of variation of the interspike intervals, as well as MUAP features.
-- `plots.py`: Functions to plot the spike trains, MUAPs, and grouped MUAPs.
-
-
-## Running tests
-Install the package with the development extras and run the test suite:
+<!-- --8<-- [start:install] -->
+Install the latest release from PyPI (Python 3.10 or newer):
 
 ```sh
-pip install -e ".[dev]"
-pytest                      # full suite
-pytest -m "not slow"        # skip the slower clustering/tracking tests
-pytest --cov                # with a coverage report
+pip install motor-unit-toolbox
 ```
 
-Tests marked `xfail` document known bugs. When one is fixed, the test starts to pass and pytest reports it as a failure (`xfail_strict`) so the marker can be removed.
+The package is imported as `motor_unit_toolbox`.
+<!-- --8<-- [end:install] -->
+
+To work on the code itself, see the development setup in [CONTRIBUTING.md](https://github.com/imendezguerra/motor_unit_toolbox/blob/main/CONTRIBUTING.md#development-setup).
+
+## Quick start
+<!-- --8<-- [start:quickstart] -->
+Spike trains are binary matrices of shape `(samples, motor units)`. The example below builds two synthetic motor units, computes their firing properties and compares them with a second (shifted) decomposition:
+
+```python
+import numpy as np
+
+from motor_unit_toolbox import props, spike_comp, utils
+
+fs = 2048                                  # sampling frequency (Hz)
+n_samples = 10 * fs                        # 10 s recording
+timestamps = np.arange(n_samples) / fs
+
+# Spike times (in samples) of two motor units firing at ~10 Hz and ~15 Hz
+rng = np.random.default_rng(0)
+firings = [
+    np.cumsum(rng.normal(fs / 10, 10, size=95)).astype(int),
+    np.cumsum(rng.normal(fs / 15, 10, size=140)).astype(int),
+]
+spike_trains = utils.firings_to_binary(firings, n_samples)  # (samples, units)
+
+# Firing properties per motor unit
+props.get_discharge_rate(spike_trains, timestamps)            # array([10.05, 15.18]) Hz
+props.get_coefficient_of_variation(spike_trains, timestamps)  # array([0.047, 0.074])
+
+# Agreement with a second decomposition of the same units (here: shifted by 2 samples)
+roa, pairs, lags = spike_comp.rate_of_agreement_paired(
+    spike_trains, np.roll(spike_trains, 2, axis=0), fs=fs
+)
+roa                                                           # array([1., 1.])
+```
+<!-- --8<-- [end:quickstart] -->
+
+## Documentation
+The full API reference, with every function and its arguments, is at
+[imendezguerra.github.io/motor_unit_toolbox](https://imendezguerra.github.io/motor_unit_toolbox/).
 
 ## Contributing
-We welcome contributions! Here’s how you can contribute:
-
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/newfeature`).
-3. Install the development tools and git hooks:
-    ```sh
-    pip install -e ".[dev]"
-    pre-commit install
-    ```
-4. Add tests for your change under `tests/` and make sure `pytest` passes.
-5. Commit your changes (`git commit -m 'Add some newfeature'`). The pre-commit hooks run ruff and basic file checks.
-6. Push to the branch (`git push origin feature/newfeature`).
-7. Open a pull request. CI runs the linters, the test suite on Python 3.9–3.13 (Linux, plus macOS and Windows), a minimum-dependency check, and a packaging check.
+Contributions are welcome! [CONTRIBUTING.md](https://github.com/imendezguerra/motor_unit_toolbox/blob/main/CONTRIBUTING.md) explains how to set up a development environment, run the tests, preview the docs, and what the automated checks (pre-commit and CI) do.
 
 ## License
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](https://github.com/imendezguerra/motor_unit_toolbox/blob/main/LICENSE).
 
 ## Citation
 
-If you use this code in your research, please cite this repository:
+If you use this code in your research, please cite it. On GitHub, the **Cite this repository** button (from [`CITATION.cff`](https://github.com/imendezguerra/motor_unit_toolbox/blob/main/CITATION.cff)) gives APA and BibTeX formats, or use:
 
-```sh
+```bibtex
 @software{Mendez_Guerra_Motor_Unit_Toolbox,
-author = {Mendez Guerra, Irene},
-title = {{Motor Unit Toolbox}},
-url = {https://github.com/imendezguerra/motor_unit_toolbox},
-version = {1.0}
+  author = {Mendez Guerra, Irene},
+  title = {{Motor Unit Toolbox}},
+  url = {https://github.com/imendezguerra/motor_unit_toolbox}
 }
 ```
+
 ## Contact
 
-For any questions or inquiries, please contact us at:
-```sh
+For any questions or inquiries, please contact:
+```
 Irene Mendez Guerra
 irene.mendez17@imperial.ac.uk
 ```
