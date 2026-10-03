@@ -118,12 +118,24 @@ environment rules (only `main` and `v*` tags are allowed).
     TestPyPI also refuses a version it has already seen. To rehearse twice, use a pre-release
     version such as `1.3.0rc1`.
 
-5. **Release:** *Releases → Draft a new release*:
-    - Create the tag `vX.Y.Z` on `main`.
+5. **Tag the release commit** from the command line (or let GitHub create the tag in the next
+   step):
+
+    ```sh
+    git checkout main && git pull                 # tag exactly what is on GitHub
+    git tag -a vX.Y.Z -m "Release vX.Y.Z"         # annotated tag, e.g. v1.2.1
+    git push origin vX.Y.Z
+    ```
+
+    Pushing a tag does **not** publish anything. Only publishing a GitHub release starts
+    `publish.yml`. Check existing tags with `git tag --list "v*"`.
+
+6. **Release:** *Releases → Draft a new release*:
+    - Choose the tag `vX.Y.Z`: the one you pushed, or type a new one to create it on `main`.
     - Write the release notes, flagging any deprecations.
     - Click **Publish release**.
-6. **Approve** the `pypi` deployment when the workflow pauses at *Upload to PyPI*.
-7. **Verify** the release:
+7. **Approve** the `pypi` deployment when the workflow pauses at *Upload to PyPI*.
+8. **Verify** the release:
     - `pip install motor-unit-toolbox` installs the new version.
     - The [PyPI page](https://pypi.org/project/motor-unit-toolbox/) and the docs show it.
 
@@ -153,6 +165,21 @@ Dependabot is off, so these updates are manual:
   number.
 - **Version check fails:** the tag and the version in the code disagree, and nothing was
   uploaded. Delete the release and its tag, fix the version on `main`, and release again.
+
+  To delete the release and tag and then recreate them:
+    1. Delete the release on GitHub: open it under *Releases* and click the trash icon.
+    2. Delete the tag on GitHub and locally, then tag the fixed commit again:
+
+        ```sh
+        git push origin --delete vX.Y.Z
+        git tag -d vX.Y.Z
+        git checkout main && git pull
+        git tag -a vX.Y.Z -m "Release vX.Y.Z"
+        git push origin vX.Y.Z
+        ```
+
+    Only reuse a tag if nothing reached PyPI. Once a version is uploaded, release the next
+    version instead.
 - **Upload fails with an OIDC / "invalid publisher" error:** the trusted publisher on PyPI
   doesn't match exactly. Check the workflow file name, the environment name and the
   repository owner/name.

@@ -10,7 +10,7 @@ abstract: >-
   action potential (MUAP) properties, spike train comparison, and MUAP tracking.
 version: 1.2.0
 # doi: TODO add the Zenodo DOI after the first archived release
-# date-released: TODO set to the release date (YYYY-MM-DD) before tagging
+date-released: 2026-10-04
 license: MIT
 url: "https://imendezguerra.github.io/motor_unit_toolbox/"
 repository-code: "https://github.com/imendezguerra/motor_unit_toolbox"
