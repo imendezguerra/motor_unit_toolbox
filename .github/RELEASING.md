@@ -156,7 +156,9 @@ Dependabot is off, so these updates are manual:
   pin in `ci/constraints-min.txt`.
 - **MkDocs:** capped at `<2` because MkDocs 2.0 drops plugins (mkdocstrings).
   [Zensical](https://zensical.org) reads `mkdocs.yml` and is the likely migration path.
-- **Deprecations:** `get_alignmnent` (misspelled alias of `get_alignment`) is due for removal in 2.0.
+- **Deprecations:** the 1.x `spike_comp` names (`rate_of_agreement_paired`, `rate_of_agreement`,
+  `rate_of_agreement_full`, `rate_of_agreement_all`, `precision_sensitivity_f1_paired`) are thin
+  wrappers that raise a `FutureWarning`. Remove them in the next major release.
 
 ## When a release fails
 
