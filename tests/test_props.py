@@ -188,18 +188,26 @@ FREQUENCY_FEATURES = [
 @pytest.mark.parametrize(("func", "ratio"), AMPLITUDE_FEATURES)
 def test_amplitude_features(func, ratio, muap):
     pair = np.stack([muap, 2 * muap])
-    out = func(pair, sel_chs_by=None)
+    out = func(pair, ch_sel_method=None)
     assert out.shape == pair.shape[:3]
     np.testing.assert_allclose(out[1], ratio * out[0])
-    assert func(muap, sel_chs_by=None).shape == (1, *muap.shape[:2])  # single MUAP
+    assert func(muap, ch_sel_method=None).shape == (1, *muap.shape[:2])  # single MUAP
 
 
 @pytest.mark.parametrize(("func", "ratio"), AMPLITUDE_FEATURES)
 def test_amplitude_features_channel_selection(func, ratio, muap):
     """Only the dominant channel is selected; the rest are NaN."""
-    out = func(np.stack([muap, 2 * muap]), sel_chs_by="iqr")
+    out = func(np.stack([muap, 2 * muap]), ch_sel_method="iqr")
     assert np.isnan(out).sum() == out.size - 2
     assert out[1, 1, 2] == pytest.approx(ratio * out[0, 1, 2])
+
+
+@pytest.mark.parametrize("func", [f for f, _ in AMPLITUDE_FEATURES] + FREQUENCY_FEATURES)
+def test_features_use_each_unit_channels(func, muaps):
+    """Units on different channels each keep their own dominant channel."""
+    selected = ~np.isnan(func(muaps, ch_sel_method="iqr"))
+    assert selected.sum(axis=(1, 2)).tolist() == [1, 1, 1]
+    assert selected[[0, 1, 2], [0, 1, 3], [0, 2, 3]].all()
 
 
 @pytest.mark.parametrize("func", [props.get_muap_peak_frequency, props.get_muap_mean_frequency])
@@ -207,14 +215,14 @@ def test_frequency_features_pure_tone(func, fs):
     samples = 64
     freq_hz = 8 * fs / samples  # exact FFT bin
     tone = np.tile(np.cos(2 * np.pi * freq_hz * np.arange(samples) / fs), (1, 2, 2, 1))
-    np.testing.assert_allclose(func(tone, sel_chs_by=None, fs=fs), freq_hz, rtol=0.05)
+    np.testing.assert_allclose(func(tone, ch_sel_method=None, fs=fs), freq_hz, rtol=0.05)
 
 
 @pytest.mark.parametrize("func", FREQUENCY_FEATURES)
 def test_frequency_features_narrower_pulse_is_higher(func, pulse, fs):
     wide = np.tile(pulse(25, width=6.0), (1, 2, 2, 1))
     narrow = np.tile(pulse(25, width=1.0), (1, 2, 2, 1))
-    assert np.all(func(narrow, sel_chs_by=None, fs=fs) >= func(wide, sel_chs_by=None, fs=fs))
+    assert np.all(func(narrow, ch_sel_method=None, fs=fs) >= func(wide, ch_sel_method=None, fs=fs))
 
 
 @pytest.mark.parametrize("func", FREQUENCY_FEATURES)
@@ -222,9 +230,9 @@ def test_frequency_features_channel_selection(func, pulse, fs):
     """Selection masks the other channels without changing the selected value."""
     muaps = np.tile(0.1 * pulse(25, width=3.0), (1, 4, 4, 1))
     muaps[0, 1, 2] = pulse(25, amp=5.0, width=1.5)
-    selected = func(muaps, sel_chs_by="iqr", fs=fs)
+    selected = func(muaps, ch_sel_method="iqr", fs=fs)
     assert np.isnan(selected).sum() == selected.size - 1
-    assert selected[0, 1, 2] == func(muaps, sel_chs_by=None, fs=fs)[0, 1, 2]
+    assert selected[0, 1, 2] == func(muaps, ch_sel_method=None, fs=fs)[0, 1, 2]
 
 
 @pytest.mark.parametrize("func", FREQUENCY_FEATURES)
@@ -232,8 +240,8 @@ def test_frequency_features_shift_invariant(func, pulse, fs):
     """The power spectrum is |FFT|^2, so a circular time shift changes nothing."""
     muaps = np.tile(pulse(25, width=2.0) - pulse(30, width=3.0), (1, 2, 2, 1))
     np.testing.assert_allclose(
-        func(muaps, sel_chs_by=None, fs=fs),
-        func(np.roll(muaps, 7, axis=-1), sel_chs_by=None, fs=fs),
+        func(muaps, ch_sel_method=None, fs=fs),
+        func(np.roll(muaps, 7, axis=-1), ch_sel_method=None, fs=fs),
     )
 
 
@@ -242,5 +250,5 @@ def test_frequency_features_single_muap_matches_batch(func, pulse, fs):
     """A single MUAP is not rectified, so it matches a batch of one."""
     muap = np.tile(pulse(22, amp=5.0) - pulse(28, amp=4.0, width=3.0), (4, 4, 1))
     np.testing.assert_array_equal(
-        func(muap, sel_chs_by=None, fs=fs), func(muap[None], sel_chs_by=None, fs=fs)
+        func(muap, ch_sel_method=None, fs=fs), func(muap[None], ch_sel_method=None, fs=fs)
     )

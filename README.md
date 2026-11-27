@@ -13,7 +13,7 @@ Motor Unit Toolbox is a Python package to analyse motor unit (MU) behaviour, fro
 The package is composed of the following modules:
 
 - `props`: MU properties such as discharge rate, pulse to noise ratio, silhouette measure, and coefficient of variation of the interspike intervals, as well as MUAP features.
-- `spike_comp`: compare spike trains between paired or unpaired sets, as well as within sets. Main metrics are rate of agreement, precision, sensitivity, F1 score, true positives, false positives, and false negatives.
+- `spike_comp`: find duplicate units within a set and compare spike trains between paired or unpaired sets. Main metrics are rate of agreement, precision, sensitivity, F1 score, true positives, false positives, and false negatives.
 - `muap_comp`: compare, cluster and track MUAPs within or across recordings.
 - `plots`: plot spike trains, MUAPs, and grouped MUAPs.
 - `utils`: convert between lists of firing times and binary spike train matrices.
@@ -45,7 +45,7 @@ To work on the code itself, see the development setup in [CONTRIBUTING.md](https
 <!-- --8<-- [start:quickstart] -->
 Spike trains are binary matrices of shape `(samples, motor units)`. The example below builds two synthetic motor units, computes their firing properties and compares them with a second (shifted) decomposition:
 
-```python
+```python exec="on" source="block" result="text" session="quickstart"
 import numpy as np
 
 from motor_unit_toolbox import props, spike_comp, utils
@@ -63,14 +63,19 @@ firings = [
 spike_trains = utils.firings_to_binary(firings, n_samples)  # (samples, units)
 
 # Firing properties per motor unit
-props.get_discharge_rate(spike_trains, timestamps)            # array([10.05, 15.18]) Hz
-props.get_coefficient_of_variation(spike_trains, timestamps)  # array([0.047, 0.074])
+print("Discharge rate (Hz):", props.get_discharge_rate(spike_trains, timestamps).round(2))
+# Discharge rate (Hz): [10.05 15.18]
+print("CoV ISI:", props.get_coefficient_of_variation(spike_trains, timestamps).round(3))
+# CoV ISI: [0.047 0.074]
 
 # Agreement with a second decomposition of the same units (here: shifted by 2 samples)
-roa, pairs, lags = spike_comp.rate_of_agreement_paired(
+agreement = spike_comp.compare_paired_spikes(
     spike_trains, np.roll(spike_trains, 2, axis=0), fs=fs
 )
-roa                                                           # array([1., 1.])
+print(agreement[["ref_idx", "test_idx", "lag", "roa"]])
+#    ref_idx  test_idx  lag  roa
+# 0        0         0   -2  1.0
+# 1        1         1   -2  1.0
 ```
 <!-- --8<-- [end:quickstart] -->
 

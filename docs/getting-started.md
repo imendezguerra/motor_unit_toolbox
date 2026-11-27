@@ -9,7 +9,8 @@
 - **Spike trains** are binary arrays of shape `(samples, motor units)`. A single unit can be
   passed as a 1D array of length `samples`.
 - **Firings** are a list with one array of spike times (in samples) per motor unit. Convert
-  between the two with `utils.firings_to_binary` and `utils.binary_to_firings`.
+  between the two with `utils.firings_to_binary` and `utils.binary_to_firings`. The
+  `spike_comp` functions accept either format.
 - **MUAPs** are arrays of shape `(rows, cols, samples)` for one motor unit on an electrode grid.
   Several units are stacked as `(units, rows, cols, samples)`. For real recordings,
   `props.get_muaps(spike_trains, emg, fs)` computes them by spike-triggered averaging of the
@@ -19,6 +20,37 @@
 ## Firing properties and spike train comparison
 
 --8<-- "README.md:quickstart"
+
+### Comparing decompositions
+
+Compare two decompositions in two steps:
+
+1. **Remove duplicates within each set.** `find_duplicates` keeps the best unit (highest
+   `quality`, e.g. SIL) and drops every unit whose rate of agreement with it is at least
+   `threshold`, so any number of copies of one motor unit collapse to one.
+2. **Match the unique units across sets.** `compare_spikes` pairs them one-to-one (Hungarian
+   algorithm on `match_metric`, RoA by default). Pairs without common spikes, or below
+   `min_score`, are unmatched: a reference unit missing from the table was not found.
+   `report_unmatched=True` adds a row for each unmatched test unit, with all its spikes as
+   false positives.
+
+```python exec="on" source="block" result="text" session="quickstart"
+# Test decomposition: both units plus a copy of unit 0 delayed by 3 samples
+decomposition = np.column_stack([spike_trains, np.roll(spike_trains[:, 0], 3)])
+
+kept_idx, duplicates_info = spike_comp.find_duplicates(
+    decomposition, quality=np.array([0.90, 0.95, 0.92]), fs=fs
+)
+print("Kept units:", kept_idx)
+print(duplicates_info.to_string())
+
+agreement = spike_comp.compare_spikes(spike_trains, decomposition[:, kept_idx], fs=fs)
+print(agreement)
+```
+
+The reference set is the ground truth: `fn` counts reference spikes missed, `fp` test spikes
+not in the reference, and `lag` is the shift (in samples) added to the test spikes to align
+them. `compute_agreement_matrix` returns the score and lag of every pair.
 
 ## Tracking motor units across contractions
 
@@ -32,7 +64,7 @@ One approach to track MUs across contractions is to track their MUAPs. In this p
 The examples below use synthetic MUAPs on an 8×8 grid. Each motor unit has its own location on
 the grid and its own waveform width:
 
-```python
+```python exec="on" source="above" session="tracking"
 import numpy as np
 
 from motor_unit_toolbox import muap_comp
@@ -60,23 +92,27 @@ Three contractions identify the units in a different order each time. Unit 3 is 
 the second contraction. All MUAPs are pooled, their pairwise distances computed, and then
 clustered:
 
-```python
+```python exec="on" source="block" result="text" session="tracking"
 contractions = [[0, 1, 2, 3], [2, 0, 1], [3, 1, 0, 2]]
-muaps = np.stack([make_muap(*units[u]) for trial in contractions for u in trial])
+true_units = np.concatenate(contractions)
+muaps = np.stack([make_muap(*units[u]) for u in true_units])
 
 # Compute muap distance (1-corr) across muaps and select the channels with outlier peak to peak value for comparison
-dist, _ = muap_comp.compute_all_muaps_dist(muaps, dist_metric="corr", sel_chs_method="iqr_ptp")
+dist, _ = muap_comp.compute_all_muaps_dist(
+    muaps, dist_metric="corr", ch_sel_method="iqr", ch_sel_metric="ptp"
+)
 
 # Track MUAPs across conditions
 opt, cluster_out = muap_comp.cluster_muaps(
-    dist, cluster_method="ward", dist_metric="corr", sel_chs_method="iqr_ptp", flag_plot=False
+    dist, cluster_method="ward", dist_metric="corr", ch_sel_method="iqr", ch_sel_metric="ptp",
+    flag_plot=False,
 )
 
 # Select the labels of clustering threshold that maximises the clustering SIL
 labels = cluster_out["labels"][opt["opt_idx"].iloc[0]].astype(int)
-# true units: [0, 1, 2, 3,  2, 0, 1,  3, 1, 0, 2]
-# labels:     [1, 4, 2, 3,  2, 1, 4,  3, 4, 1, 2]   same label = same motor unit
-opt[["opt_thr", "opt_sil", "opt_n_clusters"]]       # threshold 0.013, silhouette 0.99, 4 clusters
+print("True units:", true_units)
+print("Labels:    ", labels)  # same label = same motor unit
+print(opt[["opt_thr", "opt_sil", "opt_n_clusters"]].round(3))
 ```
 
 - `cluster_out` holds the labels and the clustering scores for every threshold tried
@@ -92,13 +128,15 @@ Units decomposed from the same contraction are normally different motor units. P
 `trial_labels` to stop them from being clustered together. The distances between them are then
 set above every threshold before clustering (`muap_comp.mask_within_trial_dist`):
 
-```python
+```python exec="on" source="block" result="text" session="tracking"
 trial_labels = np.repeat(np.arange(len(contractions)), [len(trial) for trial in contractions])
 
 opt, cluster_out = muap_comp.cluster_muaps(
     dist, cluster_method="complete", trial_labels=trial_labels, flag_plot=False
 )
-# labels: [2, 4, 1, 3,  1, 2, 4,  3, 4, 2, 1]   4 units, at most one per contraction in each
+labels = cluster_out["labels"][opt["opt_idx"].iloc[0]].astype(int)
+print("True units:", true_units)
+print("Labels:    ", labels)  # 4 units, at most one per contraction in each
 ```
 
 - Only `cluster_method="complete"` guarantees the separation. Its cluster distance is the
@@ -115,7 +153,7 @@ Five trials are recorded at increasing joint angles. Between trials, each unit's
 across the grid and widens a little. Neighbouring trials look alike, but the first and last
 trials do not:
 
-```python
+```python exec="on" source="block" result="text" session="tracking"
 n_trials = 5
 order = [rng.permutation(len(units)) for _ in range(n_trials)]   # shuffled unit order per trial
 muaps = np.stack([
@@ -131,8 +169,8 @@ group_labels, group_sets, links, graph = muap_comp.assign_muaps_all_trials(
     dist_metric="nmse",
     dist_thr=0.3,                      # pairs further apart than this are never linked
 )
-# true units:   [3, 2, 1, 0,  2, 0, 1, 3,  2, 1, 0, 3,  1, 3, 2, 0,  3, 2, 0, 1]
-# group_labels: [4, 3, 2, 1,  3, 1, 2, 4,  3, 2, 1, 4,  2, 4, 3, 1,  4, 3, 1, 2]
+print("True units:  ", np.concatenate(order))
+print("Group labels:", group_labels.astype(int))
 ```
 
 - `group_labels` gives one motor unit label per MUAP.

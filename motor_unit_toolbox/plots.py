@@ -1,7 +1,7 @@
 """Functions to plot motor unit spike trains and action potentials"""
 
 from copy import copy
-from typing import List, Literal, Optional, Union
+from typing import List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,13 +9,7 @@ import seaborn as sns
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
 
-from motor_unit_toolbox.muap_comp import (
-    get_highest_amp_ch,
-    get_highest_iqr_ch,
-    get_highest_iqr_ptp_ch,
-    get_highest_ptp_ch,
-    get_percentile_ch,
-)
+from motor_unit_toolbox.muap_comp import ChSelMethod, ChSelMetric, get_sel_chs
 
 
 def plot_spike_trains(
@@ -90,7 +84,9 @@ def plot_muaps(
     ax: Optional[plt.Axes] = None,
     palette_name: Optional[str] = "viridis",
     normalize: Optional[bool] = False,
-    ch_framed: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp", "per"]] = "iqr",
+    ch_framed: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> plt.Axes:
     """Plot motor unit action potentials (MUAPs).
 
@@ -104,9 +100,13 @@ def plot_muaps(
             use for plotting. Defaults to "viridis".
         normalize (Optional[bool], optional): Flag to normalize the MUAPs.
             Defaults to False.
-        ch_framed (Optional[str], optional): Channel framing method:
-            "iqr", "iqr_ptp", "max_amp", "ptp" or "per". None draws no frames.
-            Defaults to "iqr".
+        ch_framed (Optional[str], optional): Channel selection method for the
+            channels drawn with a frame, see
+            `muap_comp.get_sel_chs`. None draws no frames. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
 
     Returns:
         plt.Axes: Axes object containing the MUAP plot.
@@ -143,16 +143,7 @@ def plot_muaps(
     for unit in range(n_units):
 
         # Get highest amplitude channels
-        if ch_framed == "max_amp":
-            curr_amp_ch = get_highest_amp_ch(muaps_plot[unit])
-        elif ch_framed == "ptp":
-            curr_amp_ch = get_highest_ptp_ch(muaps_plot[unit])
-        elif ch_framed == "iqr":
-            curr_amp_ch = get_highest_iqr_ch(muaps_plot[unit])
-        elif ch_framed == "iqr_ptp":
-            curr_amp_ch = get_highest_iqr_ptp_ch(muaps_plot[unit])
-        elif ch_framed == "per":
-            curr_amp_ch = get_percentile_ch(muaps_plot[unit], thr=95)
+        curr_amp_ch = get_sel_chs(muaps_plot[unit], ch_framed, ch_sel_metric, ch_sel_param)
 
         for col in range(cols):
             # Apply offset to signals
@@ -240,7 +231,9 @@ def plot_clustered_muaps(
     palette_name: Optional[str] = "viridis",
     color_order: Optional[list] = None,
     normalize: Optional[bool] = False,
-    ch_framed: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp", "per"]] = "iqr",
+    ch_framed: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> plt.Axes:
     """Plot clustered motor unit action potentials (MUAPs).
 
@@ -261,9 +254,13 @@ def plot_clustered_muaps(
             legend. Defaults to None.
         normalize (Optional[bool], optional): Flag indicating whether to
             normalize the MUAPs. Defaults to False.
-        ch_framed (Optional[str], optional): Channel framing method:
-            "iqr", "iqr_ptp", "max_amp", "ptp" or "per". None draws no frames.
-            Defaults to "iqr".
+        ch_framed (Optional[str], optional): Channel selection method for the
+            channels drawn with a frame, see
+            `muap_comp.get_sel_chs`. None draws no frames. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
 
     Returns:
         plt.Axes: Axes object with the plotted MUAPs.
@@ -334,16 +331,7 @@ def plot_clustered_muaps(
             )
 
             # Get highest amplitude channels
-            if ch_framed == "max_amp":
-                curr_amp_ch = get_highest_amp_ch(muaps_cluster[unit])
-            elif ch_framed == "ptp":
-                curr_amp_ch = get_highest_ptp_ch(muaps_cluster[unit])
-            elif ch_framed == "iqr":
-                curr_amp_ch = get_highest_iqr_ch(muaps_cluster[unit])
-            elif ch_framed == "iqr_ptp":
-                curr_amp_ch = get_highest_iqr_ptp_ch(muaps_cluster[unit])
-            elif ch_framed == "per":
-                curr_amp_ch = get_percentile_ch(muaps_cluster[unit], thr=95)
+            curr_amp_ch = get_sel_chs(muaps_cluster[unit], ch_framed, ch_sel_metric, ch_sel_param)
 
             for col in range(cols):
                 # Apply offset to signals
