@@ -68,6 +68,10 @@ The site (https://imendezguerra.github.io/motor_unit_toolbox/) is built with MkD
 - `docs/api/`: the API reference, generated from the docstrings (Google style).
 - `README.md`: the overview, install and quick-start sections are pulled in from here, between
   the `<!-- --8<-- [start:...] -->` markers.
+- Code snippets marked ```` ```python exec="on" ```` are run at build time
+  ([markdown-exec](https://pawamoy.github.io/markdown-exec/)) and show what they print. Blocks
+  with the same `session` share variables. Use `print` to show results rather than writing them
+  as comments.
 
 To preview it locally, run `mkdocs serve` and open the address it prints
 (http://127.0.0.1:8000/motor_unit_toolbox/). It reloads when you edit `docs/`, `README.md` or a
@@ -129,8 +133,8 @@ Jobs run in parallel, and one failing Python version does not cancel the others.
 ### Docs build: `docs.yml`
 
 On every PR and push to `main` it runs `mkdocs build --strict`. Strict mode fails on any warning,
-such as a broken link, a missing README snippet, or a docstring whose arguments do not match the
-function signature. The site is only *deployed* when a release is published.
+such as a broken link, a missing README snippet, a docs code snippet that raises, or a docstring
+whose arguments do not match the function signature. The site is only *deployed* when a release is published.
 
 ## When a check fails
 

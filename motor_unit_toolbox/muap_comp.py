@@ -2,7 +2,7 @@
 
 import itertools
 import warnings
-from typing import Dict, Iterable, List, Literal, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Literal, Optional, Tuple, get_args
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -12,106 +12,77 @@ from easydict import EasyDict as edict
 from scipy import cluster, optimize, signal, spatial, stats
 from sklearn import metrics
 
+ChSelMethod = Literal["iqr", "perc", "n"]
+ChSelMetric = Literal["abs", "ptp"]
+DistMetric = Literal["corr", "cosine", "nmse", "nfd"]
+AssignMethod = Literal["hungarian", "grid-search"]
 
-def get_highest_iqr_ch(muap: np.ndarray) -> np.ndarray:
-    """Compute the highest interquartile range (IQR) channels.
-
-    Args:
-        muap (ndarray): Motor unit action potential with shape
-            (ch_rows, ch_cols, samples)
-
-    Returns:
-        ndarray: A boolean mask indicating the channels with the highest IQR.
-    """
-
-    peak_amps = np.amax(np.abs(muap), axis=-1)
-    peak_amps = np.reshape(peak_amps, (-1))
-    q1 = np.percentile(peak_amps, 25)
-    q3 = np.percentile(peak_amps, 75)
-    iqr = q3 - q1
-    whis = 1.5
-    outliers = peak_amps > q3 + whis * iqr
-    ch_mask = np.reshape(outliers, (muap.shape[0], muap.shape[1]))
-    return ch_mask
+# Per-channel amplitude used to select channels
+_CH_SEL_METRICS: Dict[str, Callable[[np.ndarray], np.ndarray]] = {
+    "abs": lambda muap: np.amax(np.abs(muap), axis=-1),
+    "ptp": lambda muap: np.ptp(muap, axis=-1),
+}
 
 
-def get_percentile_ch(
+def _get_option(options: Dict[str, Callable], name: str, arg: str) -> Callable:
+    """Return options[name], or raise a ValueError listing the valid names."""
+    if name not in options:
+        raise ValueError(f"Unknown {arg} {name!r}; expected one of {list(options)}.")
+    return options[name]
+
+
+def get_sel_chs(
     muap: np.ndarray,
-    thr: Optional[int] = 90
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> np.ndarray:
-    """Compute the channels that exceed a certain percentile threshold.
-
-    Args:
-        muap (ndarray): Motor unit action potential with shape
-            (ch_rows, ch_cols, samples)
-        thr (int, optional): The percentile threshold. Defaults to 90.
-
-    Returns:
-        ndarray: A boolean mask indicating the channels that exceed the
-            specified percentile threshold.
-    """
-    peak_amps = np.amax(np.abs(muap), axis=-1)
-    peak_amps = np.reshape(peak_amps, (-1))
-    outliers = peak_amps > np.percentile(peak_amps, thr)
-    ch_mask = np.reshape(outliers, (muap.shape[0], muap.shape[1]))
-    return ch_mask
-
-
-def get_highest_iqr_ptp_ch(muap: np.ndarray) -> np.ndarray:
-    """Compute the channels with the highest peak-to-peak (PTP) amplitude.
+    """Select the highest amplitude channels of a MUAP.
 
     Args:
         muap (np.ndarray): Motor unit action potential with shape
-            (ch_rows, ch_cols, samples)
+            (ch_rows, ch_cols, samples).
+        ch_sel_method (str, optional): How channels are selected from their
+            amplitude: "iqr" (above the upper Tukey fence, Q3 + 1.5 IQR),
+            "perc" (above the `ch_sel_param` quantile) or "n" (the
+            `ch_sel_param` highest channels). None selects every channel.
+            Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude: "abs" (peak absolute
+            value) or "ptp" (peak to peak). Defaults to "abs".
+        ch_sel_param (float, optional): Quantile in [0, 1] for "perc" (defaults
+            to 0.95) or number of channels for "n" (defaults to 5). Must be None
+            for the other methods. Defaults to None.
 
     Returns:
-        np.ndarray: A boolean mask indicating the channels with the highest
-            PTP amplitude.
+        np.ndarray: Boolean mask of the selected channels with shape
+            (ch_rows, ch_cols). It is empty if no channel passes the selection.
+
+    Raises:
+        ValueError: If an option is unknown or `ch_sel_param` does not match
+            `ch_sel_method`.
     """
+    if ch_sel_method not in (*get_args(ChSelMethod), None):
+        raise ValueError(
+            f"Unknown ch_sel_method {ch_sel_method!r}; "
+            f"expected one of {list(get_args(ChSelMethod))} or None."
+        )
+    if ch_sel_param is not None and ch_sel_method not in ("perc", "n"):
+        raise ValueError(f"ch_sel_param is only used by 'perc' and 'n', not {ch_sel_method!r}.")
+    amps = _get_option(_CH_SEL_METRICS, ch_sel_metric, "ch_sel_metric")(muap)
 
-    peak_amps = np.ptp(muap, axis=-1)
-    peak_amps = np.reshape(peak_amps, (-1))
-    q1 = np.percentile(peak_amps, 25)
-    q3 = np.percentile(peak_amps, 75)
-    iqr = q3 - q1
-    whis = 1.5
-    outliers = peak_amps > q3 + whis * iqr
-    ch_mask = np.reshape(outliers, (muap.shape[0], muap.shape[1]))
-    return ch_mask
+    if ch_sel_method is None:
+        return np.ones(amps.shape, dtype=bool)
+    if ch_sel_method == "iqr":
+        q1, q3 = np.percentile(amps, [25, 75])
+        return amps > q3 + 1.5 * (q3 - q1)
+    if ch_sel_method == "perc":
+        return amps > np.quantile(amps, 0.95 if ch_sel_param is None else ch_sel_param)
 
-
-def get_highest_amp_ch(muap: np.ndarray) -> np.ndarray:
-    """Compute the channels with the highest amplitude.
-
-    Args:
-        muap (ndarray): Motor unit action potential with shape
-            (ch_rows, ch_cols, samples)
-
-    Returns:
-        ndarray: A boolean mask indicating the channels with the highest
-            amplitude.
-    """
-    peak_amps = np.amax(np.abs(muap), axis=-1)
-    amp_thr = 3 * np.std(peak_amps)
-    ch_mask = peak_amps > amp_thr
-    return ch_mask
-
-
-def get_highest_ptp_ch(muap: np.ndarray) -> np.ndarray:
-    """Compute the channels with the highest peak-to-peak (PTP) amplitude.
-
-    Args:
-        muap (np.ndarray): Motor unit action potential with shape
-            (ch_rows, ch_cols, samples)
-
-    Returns:
-        np.ndarray: A boolean mask indicating the channels with the highest
-            PTP amplitude.
-    """
-    ptp_amps = np.ptp(muap, axis=-1)
-    amp_thr = 2 * np.std(ptp_amps)
-    ch_mask = ptp_amps > amp_thr
-    return ch_mask
+    # "n": highest n channels
+    n_chs = 5 if ch_sel_param is None else int(ch_sel_param)
+    ch_mask = np.zeros(amps.size, dtype=bool)
+    ch_mask[np.argsort(-amps, axis=None, kind="stable")[:n_chs]] = True
+    return ch_mask.reshape(amps.shape)
 
 
 def nmse(muap1: np.ndarray, muap2: np.ndarray) -> float:
@@ -156,13 +127,13 @@ def norm_farina_distance(muap1: np.ndarray, muap2: np.ndarray) -> float:
     muap1_mean = np.mean(muap1, axis=-1)
     muap2_mean = np.mean(muap2, axis=-1)
 
-    # Compute norms
-    muap1_l2 = np.linalg.norm(muap1, 2)
-    muap2_l2 = np.linalg.norm(muap2, 2)
+    # Compute norms (Frobenius, i.e. L2 of all samples)
+    muap1_l2 = np.linalg.norm(muap1)
+    muap2_l2 = np.linalg.norm(muap2)
 
     # Normalise muaps
-    muap1_norm = (muap1 - muap1_mean[:, None]) / muap1_l2
-    muap2_norm = (muap2 - muap2_mean[:, None]) / muap2_l2
+    muap1_norm = (muap1 - muap1_mean[..., None]) / muap1_l2
+    muap2_norm = (muap2 - muap2_mean[..., None]) / muap2_l2
 
     # Compute energy
     muap1_energy = np.sum(np.power(muap1_norm, 2))
@@ -176,12 +147,23 @@ def norm_farina_distance(muap1: np.ndarray, muap2: np.ndarray) -> float:
     return muaps_nfd
 
 
+# Distance between two flattened MUAPs
+_DIST_FUNS: Dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
+    "corr": lambda muap1, muap2: 1 - stats.pearsonr(muap1, muap2)[0],
+    "cosine": spatial.distance.cosine,
+    "nmse": nmse,
+    "nfd": norm_farina_distance,
+}
+
+
 def get_alignment(
         muap1: np.ndarray,
         muap2: np.ndarray,
         flag_debug: Optional[bool] = False
         ) -> int:
     """Compute the alignment lag between two MUAPs.
+
+    The lag maximises the correlation, so inverted MUAPs are not aligned.
 
     Args:
         muap1 (np.ndarray): First motor unit action potential with shape
@@ -192,7 +174,7 @@ def get_alignment(
             False.
 
     Returns:
-        int: The alignment lag between the two MUAPs.
+        int: The lag to apply to `muap2` (with `np.roll`) to align it to `muap1`.
     """
     # Get the muap length
     muap_length = muap1.shape[-1]
@@ -211,22 +193,19 @@ def get_alignment(
     )[0]
     bounded_corr = corr[boundary_mask]
     bounded_lags = lags[boundary_mask]
-    muaps_lag = bounded_lags[np.argmax(np.abs(bounded_corr))].astype(int)
-
-    if not np.isscalar(muaps_lag):
-        # If there is more than one possible lag, choose the minimum
-        muaps_lag = np.amin(muaps_lag)
+    max_idx = np.argmax(bounded_corr)
+    muaps_lag = int(bounded_lags[max_idx])
 
     if flag_debug:
         _, axs = plt.subplots(3, 1)
 
         axs[0].plot(bounded_lags, bounded_corr)
-        axs[0].plot(muaps_lag, bounded_corr[np.argmax(np.abs(bounded_corr))], "ro")
+        axs[0].plot(muaps_lag, bounded_corr[max_idx], "ro")
         axs[0].set_ylabel("Correlation")
         axs[0].set_xlabel("Lags")
         axs[0].grid(True)
         axs[0].set_xlim([bounded_lags[0], bounded_lags[-1]])
-        axs[0].set_title(f"max_corr = {np.amax(bounded_corr):.3f} at lag = {muaps_lag}")
+        axs[0].set_title(f"max_corr = {bounded_corr[max_idx]:.3f} at lag = {muaps_lag}")
 
         axs[1].plot(muap1_flat)
         axs[1].plot(muap2_flat)
@@ -246,165 +225,99 @@ def get_alignment(
     return muaps_lag
 
 
-def get_alignmnent(
+def compute_muaps_dist(
         muap1: np.ndarray,
         muap2: np.ndarray,
-        flag_debug: Optional[bool] = False
-        ) -> int:
-    """Deprecated misspelling of `get_alignment`, kept for backwards compatibility.
+        dist_metric: DistMetric = "nmse",
+        ch_sel_method: Optional[ChSelMethod] = "iqr",
+        ch_sel_metric: ChSelMetric = "abs",
+        ch_sel_param: Optional[float] = None,
+        ) -> Tuple[float, int]:
+    """Compute the distance between two MUAPs.
 
-    Will be removed in version 2.0.
+    The MUAPs are compared on the channels selected in either of them (all
+    channels if none is selected), after aligning `muap2` to `muap1`.
+
+    Args:
+        muap1 (np.ndarray): First motor unit action potential with shape
+            (ch_rows, ch_cols, samples).
+        muap2 (np.ndarray): Second motor unit action potential with shape
+            (ch_rows, ch_cols, samples).
+        dist_metric (str, optional): Distance metric: "corr" (1 - Pearson
+            correlation), "cosine", "nmse" or "nfd" (normalised Farina
+            distance). Defaults to "nmse".
+        ch_sel_method (str, optional): Channel selection method, see
+            `get_sel_chs`. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection,
+            see `get_sel_chs`. Defaults to "abs".
+        ch_sel_param (float, optional): Parameter of the selection method,
+            see `get_sel_chs`. Defaults to None.
+
+    Returns:
+        Tuple[float, int]: The distance between the two MUAPs and the
+            alignment lag.
+
+    Raises:
+        ValueError: If an option is unknown.
     """
-    warnings.warn(
-        "get_alignmnent is deprecated and will be removed in 2.0; use get_alignment instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_alignment(muap1, muap2, flag_debug=flag_debug)
+    dist_fun = _get_option(_DIST_FUNS, dist_metric, "dist_metric")
+
+    # Channels selected in either muap, or all channels if none
+    ch_sel = (ch_sel_method, ch_sel_metric, ch_sel_param)
+    sel_chs = np.logical_or(get_sel_chs(muap1, *ch_sel), get_sel_chs(muap2, *ch_sel))
+    if not np.any(sel_chs):
+        sel_chs[:] = True
+    muap1_sel = muap1[sel_chs]
+    muap2_sel = muap2[sel_chs]
+
+    # Align signals based on the selected channels
+    muaps_lag = get_alignment(muap1_sel, muap2_sel)
+    muap2_sel = np.roll(muap2_sel, muaps_lag, axis=-1)
+
+    return dist_fun(muap1_sel.flatten(), muap2_sel.flatten()), muaps_lag
 
 
 def compute_muaps_similarity(
     muap1: np.ndarray,
     muap2: np.ndarray,
-    sel_chs_by: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr",
-    metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse"
+    dist_metric: DistMetric = "nmse",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> Tuple[float, int]:
-    """Compute the similarity between two MUAPs.
+    """Compute the similarity between two MUAPs, as 1 - `compute_muaps_dist`.
 
     Args:
         muap1 (np.ndarray): First motor unit action potential with shape
             (ch_rows, ch_cols, samples).
         muap2 (np.ndarray): Second motor unit action potential with shape
             (ch_rows, ch_cols, samples).
-        sel_chs_by (str, optional): Method for selecting significant
-            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
-        metric (str, optional): Similarity metric to compute:
-            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
+        dist_metric (str, optional): Distance metric, see
+            `compute_muaps_dist`. Defaults to "nmse".
+        ch_sel_method (str, optional): Channel selection method, see
+            `get_sel_chs`. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection,
+            see `get_sel_chs`. Defaults to "abs".
+        ch_sel_param (float, optional): Parameter of the selection method,
+            see `get_sel_chs`. Defaults to None.
 
     Returns:
         Tuple[float, int]: The similarity between the two MUAPs and the
             alignment lag.
     """
-    # Get significant amplitude channels
-    if sel_chs_by == "max_abs":
-        muap1_ch_mask = get_highest_amp_ch(muap1)
-        muap2_ch_mask = get_highest_amp_ch(muap2)
-    elif sel_chs_by == "ptp":
-        muap1_ch_mask = get_highest_ptp_ch(muap1)
-        muap2_ch_mask = get_highest_ptp_ch(muap2)
-    elif sel_chs_by == "iqr":
-        muap1_ch_mask = get_highest_iqr_ch(muap1)
-        muap2_ch_mask = get_highest_iqr_ch(muap2)
-    elif sel_chs_by == "iqr_ptp":
-        muap1_ch_mask = get_highest_iqr_ptp_ch(muap1)
-        muap2_ch_mask = get_highest_iqr_ptp_ch(muap2)
-
-    # Check if channel masks are empty
-    if not np.any(muap1_ch_mask):
-        muap1_ch_mask = np.empty(muap1.shape[0:2])
-    if not np.any(muap2_ch_mask):
-        muap2_ch_mask = np.empty(muap2.shape[0:2])
-
-    # Apply the channel selection to the muaps and correct for the lag
-    sel_chs = np.nonzero(np.logical_or(muap1_ch_mask, muap2_ch_mask))
-    if not np.any(sel_chs):
-        sel_chs = np.ones_like(muap1).astype(bool)
-
-    muap1_sel = np.array(muap1[sel_chs])
-    muap2_sel = np.array(muap2[sel_chs])
-
-    # Align signals based on the selected channels
-    muaps_lag = get_alignment(muap1_sel, muap2_sel)
-    muap2_sel = np.roll(muap2_sel, muaps_lag, axis=-1)
-
-    # Compute metric
-    if metric == "corr":
-        muaps_sim = stats.pearsonr(muap1_sel.flatten(), muap2_sel.flatten())[0]
-    elif metric == "cosine":
-        muaps_sim = 1 - spatial.distance.cosine(
-            muap1_sel.flatten(), muap2_sel.flatten()
-        )
-    elif metric == "nmse":
-        muaps_sim = 1 - nmse(muap1_sel.flatten(), muap2_sel.flatten())
-    elif metric == "nfd":
-        muaps_sim = 1 - norm_farina_distance(muap1_sel.flatten(), muap2_sel.flatten())
-
-    return muaps_sim, muaps_lag
-
-
-def compute_muaps_dist(
-        muap1: np.ndarray,
-        muap2: np.ndarray,
-        sel_chs_by: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr",
-        metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse"
-        ) -> Tuple[float, int]:
-    """Compute the distance between two MUAPs.
-
-    Args:
-        muap1 (np.ndarray): First motor unit action potential with shape
-            (ch_rows, ch_cols, samples).
-        muap2 (np.ndarray): Second motor unit action potential with shape
-            (ch_rows, ch_cols, samples).
-        sel_chs_by (str, optional): Method for selecting significant
-            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
-        metric (str, optional): Distance metric to compute:
-            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
-
-    Returns:
-        Tuple[float, int]: The distance between the two MUAPs and the
-            alignment lag.
-    """
-
-    # Get significant amplitude channels
-    if sel_chs_by == "max_abs":
-        muap1_ch_mask = get_highest_amp_ch(muap1)
-        muap2_ch_mask = get_highest_amp_ch(muap2)
-    elif sel_chs_by == "ptp":
-        muap1_ch_mask = get_highest_ptp_ch(muap1)
-        muap2_ch_mask = get_highest_ptp_ch(muap2)
-    elif sel_chs_by == "iqr":
-        muap1_ch_mask = get_highest_iqr_ch(muap1)
-        muap2_ch_mask = get_highest_iqr_ch(muap2)
-    elif sel_chs_by == "iqr_ptp":
-        muap1_ch_mask = get_highest_iqr_ptp_ch(muap1)
-        muap2_ch_mask = get_highest_iqr_ptp_ch(muap2)
-
-    # Check if channel masks are empty
-    if not np.any(muap1_ch_mask):
-        muap1_ch_mask = np.empty(muap1.shape[0:2])
-    if not np.any(muap2_ch_mask):
-        muap2_ch_mask = np.empty(muap2.shape[0:2])
-
-    # Apply the channel selection to the muaps and correct for the lag
-    sel_chs = np.nonzero(np.logical_or(muap1_ch_mask, muap2_ch_mask))
-    if not np.any(sel_chs):
-        sel_chs = np.ones_like(muap1).astype(bool)
-
-    muap1_sel = np.array(muap1[sel_chs])
-    muap2_sel = np.array(muap2[sel_chs])
-
-    # Align signals based on the selected channels
-    muaps_lag = get_alignment(muap1_sel, muap2_sel)
-    muap2_sel = np.roll(muap2_sel, muaps_lag, axis=-1)
-
-    # Compute metric
-    if metric == "corr":
-        muaps_dist = 1 - stats.pearsonr(muap1_sel.flatten(), muap2_sel.flatten())[0]
-    elif metric == "cosine":
-        muaps_dist = spatial.distance.cosine(muap1_sel.flatten(), muap2_sel.flatten())
-    elif metric == "nmse":
-        muaps_dist = nmse(muap1_sel.flatten(), muap2_sel.flatten())
-    elif metric == "nfd":
-        muaps_dist = norm_farina_distance(muap1_sel.flatten(), muap2_sel.flatten())
-
-    return muaps_dist, muaps_lag
+    muaps_dist, muaps_lag = compute_muaps_dist(
+        muap1, muap2, dist_metric, ch_sel_method, ch_sel_metric, ch_sel_param
+    )
+    return 1 - muaps_dist, muaps_lag
 
 
 def compute_muaps_dist_sets(
     muaps1: np.ndarray,
     muaps2: np.ndarray,
-    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse",
-    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr"
+    dist_metric: DistMetric = "nmse",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute the distance between sets of MUAPs.
 
@@ -413,118 +326,104 @@ def compute_muaps_dist_sets(
             (n_units1, ch_rows, ch_cols, samples).
         muaps2 (np.ndarray): Second set of motor unit action potentials with shape
             (n_units2, ch_rows, ch_cols, samples).
-        dist_metric (str, optional): Distance metric to compute:
-            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
-        sel_chs_method (str, optional): Method for selecting significant
-            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
+        dist_metric (str, optional): Distance metric, see
+            `compute_muaps_dist`. Defaults to "nmse".
+        ch_sel_method (str, optional): Channel selection method, see
+            `get_sel_chs`. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection,
+            see `get_sel_chs`. Defaults to "abs".
+        ch_sel_param (float, optional): Parameter of the selection method,
+            see `get_sel_chs`. Defaults to None.
 
     Returns:
         Tuple[np.ndarray, np.ndarray]: The distance matrix between the two sets of
-            MUAPs and the alignment lag matrix.
+            MUAPs and the alignment lag matrix, with shape (n_units1, n_units2).
+            The lag aligns each unit of `muaps2` to each unit of `muaps1`.
     """
 
     # Check muaps size
-    if np.any([len(muaps1) == 0, len(muaps2) == 0]):
+    if len(muaps1) == 0 or len(muaps2) == 0:
         # No units
-        all_muaps_dist = np.empty(0)
-        all_muaps_lags = np.empty(0)
-    else:
-        # Check units sizes
-        if len(muaps1.shape) < 4:
-            muaps1 = np.expand_dims(muaps1, axis=0)
+        return np.empty((0, 0)), np.empty((0, 0), dtype=int)
 
-        if len(muaps2.shape) < 4:
-            muaps2 = np.expand_dims(muaps2, axis=0)
+    # Check units sizes
+    if len(muaps1.shape) < 4:
+        muaps1 = np.expand_dims(muaps1, axis=0)
+    if len(muaps2.shape) < 4:
+        muaps2 = np.expand_dims(muaps2, axis=0)
 
-        # Initialise variables
-        n_units1 = muaps1.shape[0]
-        n_units2 = muaps2.shape[0]
+    # Initialise output
+    n_units1 = muaps1.shape[0]
+    n_units2 = muaps2.shape[0]
+    all_muaps_dist = np.zeros((n_units1, n_units2))
+    all_muaps_lags = np.zeros((n_units1, n_units2), dtype=int)
 
-        # Initialise output
-        all_muaps_dist = np.zeros((n_units1, n_units2))
-        all_muaps_lags = np.zeros((n_units1, n_units2))
+    # Fill distance matrix for each pair comparison
+    for unit1, unit2 in itertools.product(range(n_units1), range(n_units2)):
+        all_muaps_dist[unit1, unit2], all_muaps_lags[unit1, unit2] = compute_muaps_dist(
+            muaps1[unit1], muaps2[unit2], dist_metric, ch_sel_method, ch_sel_metric,
+            ch_sel_param,
+        )
 
-        # Fill correlation matrix for each unique pair comparison
-        for unit1, unit2 in itertools.product(range(n_units1), range(n_units2)):
-
-            # Select motor units
-            muap1 = muaps1[unit1]
-            muap2 = muaps2[unit2]
-
-            # Compute correlation and lags
-            curr_muaps_dist, curr_muaps_lag = compute_muaps_dist(
-                muap1, muap2, sel_chs_by=sel_chs_method, metric=dist_metric
-            )
-
-            # Fill matrices
-            all_muaps_dist[unit1, unit2] = curr_muaps_dist
-            all_muaps_lags[unit1, unit2] = curr_muaps_lag
-
-    return all_muaps_dist, all_muaps_lags.astype(int)
+    return all_muaps_dist, all_muaps_lags
 
 
 def compute_all_muaps_dist(
     muaps: np.ndarray,
-    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse",
-    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr"
+    dist_metric: DistMetric = "nmse",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute the distance between all pairs of MUAPs.
 
     Args:
         muaps (np.ndarray): Motor unit action potentials with shape
             (n_units, ch_rows, ch_cols, samples).
-        dist_metric (str, optional): Distance metric to compute:
-            "corr", "cosine", "nmse" or "nfd". Defaults to "nmse".
-        sel_chs_method (str, optional): Method for selecting significant
-            amplitude channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
+        dist_metric (str, optional): Distance metric, see
+            `compute_muaps_dist`. Defaults to "nmse".
+        ch_sel_method (str, optional): Channel selection method, see
+            `get_sel_chs`. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection,
+            see `get_sel_chs`. Defaults to "abs".
+        ch_sel_param (float, optional): Parameter of the selection method,
+            see `get_sel_chs`. Defaults to None.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]: The distance matrix between all pairs of MUAPs
-            and the alignment lag matrix.
+        Tuple[np.ndarray, np.ndarray]: The symmetric distance matrix between all
+            pairs of MUAPs and the antisymmetric alignment lag matrix, with shape
+            (n_units, n_units). `lags[i, j]` aligns unit j to unit i.
     """
 
     # Check muaps size
     if len(muaps) == 0:
         # No units
-        all_muaps_dist = np.empty(0)
-        all_muaps_lags = np.empty(0)
-    else:
-        # There are units
-        if len(muaps.shape) < 4:
-            muaps = np.expand_dims(muaps, axis=0)
+        return np.empty((0, 0)), np.empty((0, 0), dtype=int)
+    if len(muaps.shape) < 4:
+        muaps = np.expand_dims(muaps, axis=0)
 
-        # Initialise variables
-        n_units = muaps.shape[0]
+    # Initialise output
+    n_units = muaps.shape[0]
+    all_muaps_dist = np.zeros((n_units, n_units))
+    all_muaps_lags = np.zeros((n_units, n_units), dtype=int)
 
-        if n_units == 1:
-            # Only one unit
-            all_muaps_dist = np.array([0])
-            all_muaps_lags = np.array([0])
-        else:
-            # More than one unit, so initialise pair combinations
-            pairs = itertools.combinations(range(n_units), 2)
-            all_muaps_dist = np.zeros((n_units, n_units))
-            all_muaps_lags = np.zeros((n_units, n_units))
+    # Fill distance matrix for each unique pair comparison
+    for unit1, unit2 in itertools.combinations(range(n_units), 2):
+        curr_muaps_dist, curr_muaps_lag = compute_muaps_dist(
+            muaps[unit1], muaps[unit2], dist_metric, ch_sel_method, ch_sel_metric,
+            ch_sel_param,
+        )
+        all_muaps_dist[unit1, unit2] = all_muaps_dist[unit2, unit1] = curr_muaps_dist
+        all_muaps_lags[unit1, unit2] = curr_muaps_lag
+        all_muaps_lags[unit2, unit1] = -curr_muaps_lag
 
-            # Fill correlation matrix for each unique pair comparison
-            for pair in pairs:
-                # Select motor units
-                muap1 = muaps[pair[0]]
-                muap2 = muaps[pair[1]]
+    return all_muaps_dist, all_muaps_lags
 
-                # Compute correlation and lags
-                curr_muaps_dist, curr_muaps_lag = compute_muaps_dist(
-                    muap1, muap2, sel_chs_by=sel_chs_method, metric=dist_metric
-                )
 
-                # Fill matrices
-                all_muaps_dist[pair[0], pair[1]] = curr_muaps_dist
-                all_muaps_dist[pair[1], pair[0]] = curr_muaps_dist
-
-                all_muaps_lags[pair[0], pair[1]] = curr_muaps_lag
-                all_muaps_lags[pair[1], pair[0]] = curr_muaps_lag
-
-    return all_muaps_dist, all_muaps_lags.astype(int)
+def _fill_value(dist: np.ndarray, dist_thr: float = 0) -> int:
+    """Integer distance above every finite distance and the threshold, to mask pairs."""
+    max_dist = np.max(dist, initial=0, where=np.isfinite(dist))
+    return int(np.ceil(max(max_dist, dist_thr))) + 1
 
 
 def mask_within_trial_dist(
@@ -542,7 +441,7 @@ def mask_within_trial_dist(
             with shape (n_units, n_units).
         trial_labels (np.ndarray): Trial label of each MUAP, with shape (n_units).
         fill_value (float, optional): Distance assigned to pairs from the same
-            trial. Defaults to 1 + the largest distance in the matrix.
+            trial. Defaults to 1 + the largest distance in the matrix, rounded up.
 
     Returns:
         np.ndarray: A masked copy of the distance matrix. The input is not modified.
@@ -554,7 +453,7 @@ def mask_within_trial_dist(
             f"({all_muaps_dist.shape[0]},) to match the distance matrix."
         )
     if fill_value is None:
-        fill_value = np.nanmax(all_muaps_dist) + 1
+        fill_value = _fill_value(all_muaps_dist)
 
     same_trial = trial_labels[:, None] == trial_labels[None, :]
     np.fill_diagonal(same_trial, False)
@@ -607,8 +506,10 @@ def cluster_muaps(
     cluster_method: Literal[
         "single", "complete", "average", "weighted", "centroid", "median", "ward"
     ] = "ward",
-    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "corr",
-    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr_ptp",
+    dist_metric: DistMetric = "nmse",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
     thr_vals: Optional[np.ndarray] = np.arange(0, 2.0001, 0.001),  # noqa: B008 (read-only)
     flag_plot: Optional[bool] = True,
     *,
@@ -618,12 +519,17 @@ def cluster_muaps(
 
     Args:
         all_muaps_dist (np.ndarray): Distance matrix between all pairs of MUAPs.
+            It is not modified.
         cluster_method (str, optional): Linkage method passed to
             scipy.cluster.hierarchy.linkage. Defaults to "ward".
         dist_metric (str, optional): Distance metric used to build
-            all_muaps_dist (stored in the output only). Defaults to "corr".
-        sel_chs_method (str, optional): Channel selection method used to
-            build all_muaps_dist (stored in the output only). Defaults to "iqr_ptp".
+            all_muaps_dist (stored in the output only). Defaults to "nmse".
+        ch_sel_method (str, optional): Channel selection method used to
+            build all_muaps_dist (stored in the output only). Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude used to build
+            all_muaps_dist (stored in the output only). Defaults to "abs".
+        ch_sel_param (float, optional): Channel selection parameter used to
+            build all_muaps_dist (stored in the output only). Defaults to None.
         thr_vals (np.ndarray, optional): Threshold values for clustering. Defaults to
             np.arange(0, 2.0001, 0.001).
         flag_plot (bool, optional): Flag to plot clustering metrics. Defaults to True.
@@ -640,8 +546,9 @@ def cluster_muaps(
             clustering metrics. The dictionary contains the following keys:
             - "cluster_method" (str): The clustering method used.
             - "dist_metric" (str): The distance metric used.
-            - "sel_chs_method" (str): The method used for selecting significant amplitude
-                channels.
+            - "ch_sel_method" (str): The channel selection method used.
+            - "ch_sel_metric" (str): The channel amplitude used for the selection.
+            - "ch_sel_param" (float): The channel selection parameter used.
             - "labels" (np.ndarray): The cluster labels for each threshold value.
             - "n_clusters" (np.ndarray): The number of clusters for each threshold value.
             - "sil" (np.ndarray): The silhouette scores for each threshold value.
@@ -655,19 +562,26 @@ def cluster_muaps(
                 threshold value.
             - "b_dist_std" (np.ndarray): The standard deviation of between-cluster distances
                 for each threshold value.
+
+    Raises:
+        ValueError: If no threshold in `thr_vals` gives between 2 and n_units - 1
+            clusters, so the silhouette cannot select one.
     """
 
-    # Initialise variables
+    # Initialise variables (on a copy, so the input is not modified)
+    all_muaps_dist = np.array(all_muaps_dist, dtype=float)
     n_units = all_muaps_dist.shape[0]
+
+    # Distances without the diagonal, for the within and between cluster stats
+    pair_dist = all_muaps_dist.copy()
+    np.fill_diagonal(pair_dist, np.nan)
 
     # Keep units from the same trial apart (only affects the linkage, not the metrics)
     link_dist = all_muaps_dist
     if trial_labels is not None:
         trial_labels = np.asarray(trial_labels)
         link_dist = mask_within_trial_dist(
-            all_muaps_dist,
-            trial_labels,
-            fill_value=max(np.nanmax(all_muaps_dist), np.max(thr_vals)) + 1,
+            all_muaps_dist, trial_labels, fill_value=_fill_value(all_muaps_dist, np.max(thr_vals))
         )
 
     # Transform distance from redundant form into condensed form
@@ -680,7 +594,9 @@ def cluster_muaps(
     cluster_out = {
         "cluster_method": cluster_method,
         "dist_metric": dist_metric,
-        "sel_chs_method": sel_chs_method,
+        "ch_sel_method": ch_sel_method,
+        "ch_sel_metric": ch_sel_metric,
+        "ch_sel_param": ch_sel_param,
         "labels": np.empty((len(thr_vals), n_units)),
         "n_clusters": np.empty(len(thr_vals)),
         "sil": np.empty(len(thr_vals)),
@@ -725,15 +641,14 @@ def cluster_muaps(
         w_dist_std = []
         b_dist_mean = []
         b_dist_std = []
-        np.fill_diagonal(all_muaps_dist, np.nan)
 
         for curr_cluster in np.unique(cluster_out["labels"][i]):
             curr_cluster_mask = cluster_out["labels"][i] == curr_cluster
 
             # Single-unit clusters have no within distances and a single cluster has
             # no between distances: these are NaN (skipped quietly, not warned about)
-            within_dists = all_muaps_dist[np.ix_(curr_cluster_mask, curr_cluster_mask)]
-            between_dists = all_muaps_dist[
+            within_dists = pair_dist[np.ix_(curr_cluster_mask, curr_cluster_mask)]
+            between_dists = pair_dist[
                 np.ix_(curr_cluster_mask, np.logical_not(curr_cluster_mask))
             ]
             w_dist_mean.append(_nanmean_or_nan(within_dists))
@@ -746,9 +661,12 @@ def cluster_muaps(
         cluster_out["b_dist_mean"][i] = _nanmean_or_nan(b_dist_mean)
         cluster_out["b_dist_std"][i] = _nanmean_or_nan(b_dist_std)
 
-        np.fill_diagonal(all_muaps_dist, 0)
-
     # Find maximum sil
+    if np.all(np.isnan(cluster_out["sil"])):
+        raise ValueError(
+            "No threshold in thr_vals gives between 2 and n_units - 1 clusters, "
+            "so the silhouette cannot select one."
+        )
     opt_sil_idx = np.nanargmax(cluster_out["sil"])
     opt_thr = thr_vals[opt_sil_idx]
     opt_sil = cluster_out["sil"][opt_sil_idx]
@@ -763,7 +681,9 @@ def cluster_muaps(
         {
             "cluster_method": [cluster_method],
             "dist_metric": [dist_metric],
-            "sel_chs_method": [sel_chs_method],
+            "ch_sel_method": [ch_sel_method],
+            "ch_sel_metric": [ch_sel_metric],
+            "ch_sel_param": [ch_sel_param],
             "opt_sil": [opt_sil],
             "opt_idx": [opt_sil_idx],
             "opt_thr": [opt_thr],
@@ -783,7 +703,7 @@ def cluster_muaps(
             leaf_font_size=12,
         )
         axs[0].set_title(
-            f"{cluster_method}" +
+            f"{cluster_method}: " +
             f"max sil = {opt_thr_info['opt_sil'].values[0]:.3f}, " +
             f"thr = {opt_thr_info['opt_thr'].values[0]:.3f}"
         )
@@ -1022,7 +942,8 @@ def apply_hungarian_algorithm(
     Apply the Hungarian algorithm for association based on the given distance matrix.
 
     Args:
-        curr_dist_mat (np.ndarray): The distance matrix.
+        curr_dist_mat (np.ndarray): The distance matrix. NaN distances (e.g.
+            from flat MUAPs) are never matched.
         dist_thr (float): The distance threshold.
 
     Returns:
@@ -1032,6 +953,10 @@ def apply_hungarian_algorithm(
         >>> apply_hungarian_algorithm(curr_dist_mat, dist_thr)
         (array([0, 1, 2]), array([0, 1, 2]))
     """
+    # linear_sum_assignment rejects NaN: replace them by a distance above the threshold
+    curr_dist_mat = np.where(
+        np.isnan(curr_dist_mat), _fill_value(curr_dist_mat, dist_thr), curr_dist_mat
+    )
     rows, cols = optimize.linear_sum_assignment(curr_dist_mat)
 
     # Keep only the rows and cols that meet the threshold
@@ -1049,7 +974,8 @@ def apply_sorted_grid_search(
     distance matrix.
 
     Args:
-        curr_dist_mat (np.ndarray): The distance matrix.
+        curr_dist_mat (np.ndarray): The distance matrix. NaN distances (e.g.
+            from flat MUAPs) are never matched.
         dist_thr (float): The distance threshold.
 
     Returns:
@@ -1059,6 +985,10 @@ def apply_sorted_grid_search(
         >>> apply_sorted_grid_search(curr_dist_mat, dist_thr)
         ([0, 1, 2], [0, 1, 2])
     """
+    # NaN would win np.min/np.argmin: replace them by a distance above the threshold
+    curr_dist_mat = np.where(
+        np.isnan(curr_dist_mat), _fill_value(curr_dist_mat, dist_thr), curr_dist_mat
+    )
 
     #  Search for possible matches for each row
     rows, cols = [], []
@@ -1081,30 +1011,55 @@ def apply_sorted_grid_search(
     return rows, cols
 
 
+_ASSIGN_FUNS: Dict[str, Callable] = {
+    "hungarian": apply_hungarian_algorithm,
+    "grid-search": apply_sorted_grid_search,
+}
+
+
+def _check_trial_order(trial_labels: np.ndarray, trial_set: List[int]) -> None:
+    """Raise a ValueError unless the MUAPs are sorted by trial, in trial_set order."""
+    counts = [np.sum(trial_labels == trial) for trial in trial_set]
+    if not np.array_equal(trial_labels, np.repeat(trial_set, counts)):
+        raise ValueError(
+            "trial_labels must be sorted in trial_set order, and every label must be "
+            "in trial_set."
+        )
+
+
 def assign_muaps_across_seq_trials(
     dist_mat: np.ndarray,
     trial_labels: np.ndarray,
     trial_set: List[int],
-    assign_method: Literal["hungarian", "grid-search"] = "grid-search",
-    dist_thr: Optional[float] = 0.3
+    assign_method: AssignMethod = "grid-search",
+    dist_thr: Optional[float] = 0.2
 ) -> Tuple[Dict[str, List], nx.DiGraph, np.ndarray]:
     """
     Assign MUAPs across sequential trials based on the given distance matrix.
 
     Args:
         dist_mat (np.ndarray): The distance matrix.
-        trial_labels (np.ndarray): All trial labels.
+        trial_labels (np.ndarray): Trial label of each MUAP, sorted in
+            `trial_set` order.
         trial_set (List[int]): The trial labels present in the distance matrix.
         assign_method (str, optional): The method to use for assignment:
             "hungarian" or "grid-search". Defaults to "grid-search".
-        dist_thr (float, optional): The distance threshold. Defaults to 0.3.
+        dist_thr (float, optional): The distance threshold. Defaults to 0.2.
 
     Returns:
         Tuple[Dict[str, List], nx.DiGraph, np.ndarray]: A tuple containing the
             output dictionary, the graph, and the updated distance matrix.
-    """
 
-    #  Initialise outputs
+    Raises:
+        ValueError: If `assign_method` is unknown or `trial_labels` is not
+            sorted in `trial_set` order.
+    """
+    trial_labels = np.asarray(trial_labels)
+    _check_trial_order(trial_labels, trial_set)
+    assign_fun = _get_option(_ASSIGN_FUNS, assign_method, "assign_method")
+    fill_value = _fill_value(dist_mat, dist_thr)
+
+    #  Initialise outputs
     keys = ["unit1", "unit2", "label1", "label2", "group", "link_dist", "no_link_dist"]
     out_dict = edict({key: [] for key in keys})
 
@@ -1113,7 +1068,7 @@ def assign_muaps_across_seq_trials(
     extents = nx.utils.pairwise(itertools.accumulate([0,] + subset_sizes))
     layers = [range(start, end) for start, end in extents]
 
-    #  Generate graph
+    #  Generate graph
     graph = nx.DiGraph()
     for trial, layer in zip(trial_set, layers, strict=True):
         graph.add_nodes_from(layer, layer=trial)
@@ -1126,28 +1081,25 @@ def assign_muaps_across_seq_trials(
         idx_i = np.nonzero(trial_labels == trial_i)[0]
         idx_j = np.nonzero(trial_labels == trial_j)[0]
 
-        #  If there are no units in any of the trials, skip
+        #  If there are no units in any of the trials, skip
         if len(idx_i) < 1 or len(idx_j) < 1:
             continue
 
-        #  Assign units
+        #  Assign units
         curr_dist_mat = dist_mat[np.ix_(idx_i, idx_j)]
-        if assign_method == "hungarian":
-            rows, cols = apply_hungarian_algorithm(curr_dist_mat, dist_thr)
-        elif assign_method == "grid-search":
-            rows, cols = apply_sorted_grid_search(curr_dist_mat, dist_thr)
+        rows, cols = assign_fun(curr_dist_mat, dist_thr)
 
-        #  If there are no valid matches, all units are unique
+        #  If there are no valid matches, all units are unique
         if len(rows) < 1:
             continue
 
-        #  Mark the groups
+        #  Mark the groups
         out_dict, graph = mark_groups(
             rows, cols, idx_i, idx_j, curr_dist_mat, trial_labels, out_dict, graph
         )
 
         # Once a trial has been explored, mask it
-        dist_mat[np.ix_(idx_i, idx_j)] = 2
+        dist_mat[np.ix_(idx_i, idx_j)] = fill_value
 
     return out_dict, graph, dist_mat
 
@@ -1156,63 +1108,70 @@ def assign_muaps_all_trials(
     muaps: np.ndarray,
     trial_labels: np.ndarray,
     trial_set: List[int],
-    assign_method: Literal["hungarian", "grid-search"] = "hungarian",
-    dist_metric: Literal["corr", "cosine", "nmse", "nfd"] = "nmse",
-    dist_thr: float = 0.3,
-    sel_chs_method: Literal["iqr", "iqr_ptp", "max_abs", "ptp"] = "iqr",
+    assign_method: AssignMethod = "hungarian",
+    dist_metric: DistMetric = "nmse",
+    dist_thr: float = 0.2,
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> Tuple[List[int], List[List[int]], pd.DataFrame, nx.DiGraph]:
     """
     Assign MUAPs across all trials based on the given distance matrix.
 
     Args:
         muaps (np.ndarray): MUAPs with shape (units, ch_rows, ch_cols, samples).
-        trial_labels (np.ndarray): All trial labels.
-        trial_set (List[int]): The trial labels of the MUAPs.
+        trial_labels (np.ndarray): Trial label of each MUAP. The MUAPs must be
+            sorted by trial, in `trial_set` order.
+        trial_set (List[int]): The trial labels of the MUAPs, in the order
+            used to match neighbouring trials.
         assign_method (str, optional): The method to use for assignment:
             "hungarian" or "grid-search". Defaults to "hungarian".
-        dist_metric (str, optional): The distance metric: "corr", "cosine", "nmse" or "nfd".
-            Defaults to "nmse".
-        dist_thr (float, optional): The distance threshold. Defaults to 0.3.
-        sel_chs_method (str, optional): The method to use for selecting
-            channels: "iqr", "iqr_ptp", "max_abs" or "ptp". Defaults to "iqr".
+        dist_metric (str, optional): Distance metric, see
+            `compute_muaps_dist`. Defaults to "nmse".
+        dist_thr (float, optional): The distance threshold. Defaults to 0.2.
+        ch_sel_method (str, optional): Channel selection method, see
+            `get_sel_chs`. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection,
+            see `get_sel_chs`. Defaults to "abs".
+        ch_sel_param (float, optional): Parameter of the selection method,
+            see `get_sel_chs`. Defaults to None.
 
     Returns:
         Tuple[List[int], List[List[int]], pd.DataFrame, nx.DiGraph]: A tuple
             containing the group labels, group sets, link information dataframe,
             and the graph.
-    """
 
-    #  Compute distances between muaps
-    #  -------------------------------
+    Raises:
+        ValueError: If an option is unknown or `trial_labels` is not sorted in
+            `trial_set` order.
+    """
+    # Check inputs before computing the distances
+    trial_labels = np.asarray(trial_labels)
+    _check_trial_order(trial_labels, trial_set)
+    assign_fun = _get_option(_ASSIGN_FUNS, assign_method, "assign_method")
+
+    #  Compute distances between muaps
+    #  -------------------------------
     dist_mat, _ = compute_all_muaps_dist(
-        muaps, sel_chs_method=sel_chs_method, dist_metric=dist_metric
+        muaps, dist_metric, ch_sel_method, ch_sel_metric, ch_sel_param
     )
 
-    # Discard connections between the same trial
-    idx_tril = np.tril_indices(dist_mat.shape[0])
-    dist_mat[idx_tril] = 2
-    for trial in np.unique(trial_labels):
-        trial_idxs = np.nonzero(trial_labels == trial)[0]
-        dist_mat[np.ix_(trial_idxs, trial_idxs)] = 2
-
-    # fig, axs = plt.subplots(1,3, figsize=(12,4), layout='constrained', dpi=200)
-    # g = sns.heatmap(dist_mat, annot=False, ax=axs[0])
-    # g.set(title='Initial')
+    # Discard connections within a trial and towards earlier trials
+    fill_value = _fill_value(dist_mat, dist_thr)
+    dist_mat = mask_within_trial_dist(dist_mat, trial_labels, fill_value)
+    dist_mat[np.tril_indices(dist_mat.shape[0])] = fill_value
 
     out_dict, graph, dist_mat = assign_muaps_across_seq_trials(
         dist_mat, trial_labels, trial_set, assign_method, dist_thr
     )
 
-    # g = sns.heatmap(dist_mat, annot=False, ax=axs[1])
-    # g.set(title='After adjacent')
-
     # Find distant neighbours
     # -----------------------
-    #  Find distant hits
+    #  Find distant hits
     rows, cols = np.nonzero(dist_mat <= dist_thr)
     distant_dists = dist_mat[rows, cols]
 
-    #  Sort based on distant metric
+    #  Sort based on distant metric
     sort_idxs = np.argsort(distant_dists)
     rows, cols = rows[sort_idxs], cols[sort_idxs]
 
@@ -1222,45 +1181,38 @@ def assign_muaps_all_trials(
     ]
     trial_comb = list(dict.fromkeys(distant_trials))
 
-    #  Apply hungarian algorithm
+    #  Apply hungarian algorithm
     for trial_i, trial_j in trial_comb:
 
         # Get indexes of the trials
         idx_i = np.nonzero(trial_labels == trial_i)[0]
         idx_j = np.nonzero(trial_labels == trial_j)[0]
 
-        #  Select source units within trial_i (no output edges)
+        #  Select source units within trial_i (no output edges)
         idx_i = [idx for idx in idx_i if graph.out_degree(idx) == 0]
-        #  Select target units within trial_j (no input edges)
+        #  Select target units within trial_j (no input edges)
         idx_j = [idx for idx in idx_j if graph.in_degree(idx) == 0]
 
         if len(idx_i) < 1 or len(idx_j) < 1:
             # Once a trial has been explored, mask it
-            dist_mat[np.ix_(idx_i, idx_j)] = 2
+            dist_mat[np.ix_(idx_i, idx_j)] = fill_value
             continue
 
-        #  Assign units
+        #  Assign units
         curr_dist_mat = dist_mat[np.ix_(idx_i, idx_j)]
-        if assign_method == "hungarian":
-            rows, cols = apply_hungarian_algorithm(curr_dist_mat, dist_thr)
-        elif assign_method == "grid-search":
-            rows, cols = apply_sorted_grid_search(curr_dist_mat, dist_thr)
+        rows, cols = assign_fun(curr_dist_mat, dist_thr)
 
-        #  If there are no valid matches, all units are unique
+        #  If there are no valid matches, all units are unique
         if len(rows) < 1:
             continue
 
-        #  Mark the groups
+        #  Mark the groups
         out_dict, graph = mark_groups(
             rows, cols, idx_i, idx_j, curr_dist_mat, trial_labels, out_dict, graph
         )
 
         # Once a trial has been explored, mask it
-        dist_mat[np.ix_(idx_i, idx_j)] = 2
-
-    # g = sns.heatmap(dist_mat, annot=False, ax=axs[2])
-    # g.set(title='After distant')
-    # plt.show()
+        dist_mat[np.ix_(idx_i, idx_j)] = fill_value
 
     #  Generate group sets and labels
     group_sets = generate_group_sets(graph)

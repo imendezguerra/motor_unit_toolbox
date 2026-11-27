@@ -17,10 +17,15 @@ def test_plot_spike_trains(spike_train, timestamps, firings_sorted):
     assert len(ax.collections) == len(firings)
 
 
-@pytest.mark.parametrize("ch_framed", ["iqr", "iqr_ptp", "max_amp", "ptp", "per", None])
-def test_plot_muaps(muaps, ch_framed):
+@pytest.mark.parametrize(
+    ("ch_framed", "ch_sel_metric", "ch_sel_param"),
+    [("iqr", "abs", None), ("iqr", "ptp", None), ("perc", "abs", 0.95), ("n", "ptp", 2), (None, "abs", None)],
+)
+def test_plot_muaps(muaps, ch_framed, ch_sel_metric, ch_sel_param):
     original = muaps.copy()
-    ax = plots.plot_muaps(muaps, ch_framed=ch_framed)
+    ax = plots.plot_muaps(
+        muaps, ch_framed=ch_framed, ch_sel_metric=ch_sel_metric, ch_sel_param=ch_sel_param
+    )
     assert [a.get_title() for a in ax] == [f"Motor unit: {u}" for u in range(muaps.shape[0])]
     np.testing.assert_array_equal(muaps, original)  # input not modified
 
@@ -68,11 +73,11 @@ def test_plot_clustered_muaps_given_axes(clustered, muaps):
         plots.plot_clustered_muaps(*clustered, ax=ax)
 
 
-def test_plot_clustered_muaps_per_framing_uses_cluster_muap(clustered):
+def test_plot_clustered_muaps_perc_framing_uses_cluster_muap(clustered):
     """Cluster 2 holds only unit 2 (dominant channel (3, 3)), so its single
     frame must be at row 3, column 3."""
     muaps = clustered[0]
-    ax = plots.plot_clustered_muaps(*clustered, ch_framed="per")
+    ax = plots.plot_clustered_muaps(*clustered, ch_framed="perc", ch_sel_param=0.95)
     samples = muaps.shape[-1]
     x_step = samples + round(samples / 10)  # column spacing used by the plot
     y_offset = 2.01  # row spacing for MUAPs normalised to a peak of 1

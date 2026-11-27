@@ -1,18 +1,12 @@
 """Functions to compute motor unit properties"""
 
-import itertools
 from copy import copy
-from typing import Literal, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from scipy import signal
 
-from motor_unit_toolbox.muap_comp import (
-    get_highest_amp_ch,
-    get_highest_iqr_ch,
-    get_highest_iqr_ptp_ch,
-    get_highest_ptp_ch,
-)
+from motor_unit_toolbox.muap_comp import ChSelMethod, ChSelMetric, get_sel_chs
 
 
 def _check_mu_format(data: np.ndarray) -> np.ndarray:
@@ -554,75 +548,82 @@ def center_muaps(muaps: np.ndarray) -> np.ndarray:
     return centered_muaps
 
 
+def _mask_unselected_chs(
+    feature: np.ndarray,
+    muaps: np.ndarray,
+    ch_sel_method: Optional[ChSelMethod],
+    ch_sel_metric: ChSelMetric,
+    ch_sel_param: Optional[float],
+) -> np.ndarray:
+    """Set the feature of each unit's unselected channels to NaN.
+
+    Each unit uses its own channel selection, or all channels if none is selected.
+
+    Args:
+        feature (np.ndarray): Feature per channel with shape (units, rows, cols).
+        muaps (np.ndarray): MUAPs with shape (units, rows, cols, samples).
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. None keeps every channel.
+        ch_sel_metric (str): Channel amplitude for the selection.
+        ch_sel_param (float, optional): Parameter of the selection method.
+
+    Returns:
+        np.ndarray: The feature as float, with NaN on the unselected channels.
+    """
+    sel_chs = np.stack(
+        [get_sel_chs(muap, ch_sel_method, ch_sel_metric, ch_sel_param) for muap in muaps]
+    )
+    sel_chs[~np.any(sel_chs, axis=(1, 2))] = True
+    feature = feature.astype(float)
+    feature[~sel_chs] = np.nan
+    return feature
+
+
 def get_muap_waveform_length(
     muaps: np.ndarray,
-    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr"
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> np.ndarray:
     """
     Compute the waveform length of motor unit action potentials (MUAPs).
 
-    Parameters:
+    Args:
         muaps (np.ndarray): Array of MUAPs with shape (m, r, c, win_samples),
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
 
     Returns:
         np.ndarray: Array of waveform lengths with shape (m, r, c), where m is
             the number of motor units, r is the number of rows, and c is the
-            number of columns.
+            number of columns. Unselected channels are NaN.
 
     Notes:
         - The waveform length is computed as the sum of absolute differences
           between consecutive samples of each MUAP.
-        - If sel_chs_by is specified, the waveform length is computed only for
-          the selected channels based on the specified method.
     """
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
-    units = muaps.shape[0]
 
-    if sel_chs_by is None:
-        # Compute muap length for each muap channel
-        wl = np.sum(np.abs(np.diff(muaps, axis=-1)), axis=-1)
-    else:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
-
-        # Initialise muap length
-        wl = np.empty(muaps.shape[0:3])
-        wl[:] = np.nan
-
-        # Compute muap length
-        for unit in range(units):
-            muap_sel_chs = muaps[unit][sel_chs_mask]
-            wl[unit][sel_chs_mask] = np.sum(np.abs(
-                np.diff(muap_sel_chs, axis=-1)
-                ), axis=-1)
-
-    return wl
+    # Compute muap length for each muap channel
+    wl = np.sum(np.abs(np.diff(muaps, axis=-1)), axis=-1)
+    return _mask_unselected_chs(wl, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)
 
 
 def get_muap_energy(
     muaps: np.ndarray,
-    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr"
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> np.ndarray:
     """
     Compute the energy of motor unit action potentials (MUAPs).
@@ -632,61 +633,36 @@ def get_muap_energy(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
 
     Returns:
         np.ndarray: Array of energy values with shape (m, r, c), where m is
             the number of motor units, r is the number of rows, and c is the
-            number of columns.
+            number of columns. Unselected channels are NaN.
 
     Notes:
         - The energy is computed as the sum of squared values of each MUAP.
-        - If sel_chs_by is specified, the energy is computed only for the
-          selected channels based on the specified method.
     """
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
-    units = muaps.shape[0]
 
-    if sel_chs_by is None:
-        # Compute muap energy for each muap channel
-        energy = np.sum(np.power(muaps, 2), axis=-1)
-    else:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
-
-        # Initialise muap energy
-        energy = np.empty(muaps.shape[0:3])
-        energy[:] = np.nan
-
-        # Compute muap energy
-        for unit in range(units):
-            muap_sel_chs = muaps[unit][sel_chs_mask]
-            energy[unit][sel_chs_mask] = np.sum(
-                np.power(muap_sel_chs, 2), axis=-1
-            )
-
-    return energy
+    # Compute muap energy for each muap channel
+    energy = np.sum(np.power(muaps, 2), axis=-1)
+    return _mask_unselected_chs(energy, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)
 
 
 def get_muap_ptp(
     muaps: np.ndarray,
-    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> np.ndarray:
     """
     Compute the peak-to-peak amplitude of motor unit action potentials (MUAPs).
@@ -696,128 +672,85 @@ def get_muap_ptp(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
 
     Returns:
         np.ndarray: Array of peak-to-peak amplitudes with shape (m, r, c), where m is
             the number of motor units, r is the number of rows, and c is the
-            number of columns.
+            number of columns. Unselected channels are NaN.
 
     Notes:
         - The peak-to-peak amplitude is computed as the difference between the
           maximum and minimum values of each MUAP.
-        - If sel_chs_by is specified, the peak-to-peak amplitude is computed only
-          for the selected channels based on the specified method.
     """
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
-    units = muaps.shape[0]
 
-    if sel_chs_by is None:
-        # Compute muap peak to peak amplitude for each muap channel
-        ptp = np.ptp(muaps, axis=-1)
-    else:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
-
-        # Initialise muap peak to peak amplitude
-        ptp = np.empty(muaps.shape[0:3])
-        ptp[:] = np.nan
-
-        # Compute muap peak to peak amplitude
-        for unit in range(units):
-            muap_sel_chs = muaps[unit][sel_chs_mask]
-            ptp[unit][sel_chs_mask] = np.ptp(muap_sel_chs, axis=-1)
-
-    return ptp
+    # Compute muap peak to peak amplitude for each muap channel
+    ptp = np.ptp(muaps, axis=-1)
+    return _mask_unselected_chs(ptp, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)
 
 
 def get_muap_ptp_time(
     muaps: np.ndarray,
-    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
 ) -> np.ndarray:
     """
     Compute the peak-to-peak time (in samples) of motor unit action potentials (MUAPs).
 
-    Parameters:
+    Args:
         muaps (np.ndarray): Array of MUAPs with shape (m, r, c, win_samples),
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
 
     Returns:
         np.ndarray: Array of peak-to-peak times (in samples) with shape (m, r, c),
             where m is the number of motor units, r is the number of rows, and
-            c is the number of columns.
+            c is the number of columns. Unselected channels are NaN.
 
     Notes:
         - The peak-to-peak time is computed as the absolute difference between
           the sample index of the maximum and minimum values of each MUAP.
-        - If sel_chs_by is specified, the peak-to-peak time is computed only for
-          the selected channels based on the specified method.
     """
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
-    units = muaps.shape[0]
 
-    if sel_chs_by is None:
-        # Compute muap peak to peak time (in samples) for each muap channel
-        ptp_time = np.abs(
-            np.argmax(muaps, axis=-1) - np.argmin(muaps, axis=-1)
-        )
-    else:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
+    # Compute muap peak to peak time (in samples) for each muap channel
+    ptp_time = np.abs(np.argmax(muaps, axis=-1) - np.argmin(muaps, axis=-1))
+    return _mask_unselected_chs(ptp_time, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)
 
-        # Initialise muap peak to peak time (in samples)
-        ptp_time = np.empty(muaps.shape[0:3])
-        ptp_time[:] = np.nan
 
-        # Compute muap peak to peak time (in samples)
-        for unit in range(units):
-            muap_sel_chs = muaps[unit][sel_chs_mask]
-            ptp_time[unit][sel_chs_mask] = np.abs(
-                np.argmax(muap_sel_chs, axis=-1) -
-                np.argmin(muap_sel_chs, axis=-1)
-            )
-
-    return ptp_time
+def _power_spectrum(muaps: np.ndarray, fs: int) -> Tuple[np.ndarray, np.ndarray]:
+    """One-sided power spectrum of each MUAP channel and its frequencies (Hz)."""
+    samples = muaps.shape[-1]
+    ps = np.power(np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2)[..., :samples//2]
+    freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
+    return ps, freq
 
 
 def get_muap_peak_frequency(
     muaps: np.ndarray,
-    sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
+    ch_sel_method: Optional[ChSelMethod] = "iqr",
+    ch_sel_metric: ChSelMetric = "abs",
+    ch_sel_param: Optional[float] = None,
     fs: Optional[int] = 2048
 ) -> np.ndarray:
     """
@@ -828,69 +761,39 @@ def get_muap_peak_frequency(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
         fs (int, optional): Sampling frequency in Hz. Defaults to 2048.
 
     Returns:
         np.ndarray: Array of peak frequencies with shape (m, r, c), where m is
             the number of motor units, r is the number of rows, and c is the
-            number of columns.
+            number of columns. Unselected channels are NaN.
 
     Notes:
         - The peak frequency is computed as the frequency corresponding to the
           maximum value in the power spectrum of each MUAP.
-        - If sel_chs_by is specified, the peak frequency is computed only for
-          the selected channels based on the specified method.
     """
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
 
-    # Compute power spectrum for each muap channel
-    units, rows, cols, samples = muaps.shape
-    ps = np.power(
-        np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2
-        )[:, :, :, :samples//2]
-    freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
-    max_ps_idx = np.argmax(ps, axis=-1)
-
-    if sel_chs_by is not None:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
-    else:
-        sel_chs_mask = np.ones(muaps.shape[1:3]).astype(bool)
-
-    # Initialise peak frequency
-    peak_freq = np.empty(muaps.shape[0:3])
-    peak_freq[:] = np.nan
-    for unit, row, col in itertools.product(
-            range(units), range(rows), range(cols)
-            ):
-        if not sel_chs_mask[row, col]:
-            continue
-        peak_freq[unit, row, col] = freq[max_ps_idx[unit, row, col]]
-
-    return peak_freq
+    # Frequency of the power spectrum peak for each muap channel
+    ps, freq = _power_spectrum(muaps, fs)
+    peak_freq = freq[np.argmax(ps, axis=-1)]
+    return _mask_unselected_chs(peak_freq, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)
 
 
 def get_muap_median_frequency(
         muaps: np.ndarray,
-        sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
+        ch_sel_method: Optional[ChSelMethod] = "iqr",
+        ch_sel_metric: ChSelMetric = "abs",
+        ch_sel_param: Optional[float] = None,
         fs: Optional[int] = 2048
     ) -> np.ndarray:
     """
@@ -901,135 +804,74 @@ def get_muap_median_frequency(
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
         fs (int, optional): Sampling frequency in Hz. Defaults to 2048.
 
     Returns:
         np.ndarray: Array of median frequencies with shape (m, r, c), where m is
             the number of motor units, r is the number of rows, and c is the
-            number of columns.
+            number of columns. Unselected channels are NaN.
 
     Notes:
         - The median frequency is computed as the frequency corresponding to the
           cumulative power spectrum reaching half of its total power.
-        - If sel_chs_by is specified, the median frequency is computed only for
-          the selected channels based on the specified method.
     """
-
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
 
-    # Compute power spectrum for each muap channel
-    units, rows, cols, samples = muaps.shape
-    ps = np.power(
-        np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2
-        )[:, :, :, :samples//2]
-    freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
-
-    # Compute peak frequency
+    # Frequency where the cumulative power reaches half the total, for each muap channel
+    ps, freq = _power_spectrum(muaps, fs)
     cum_ps = np.cumsum(ps, axis=-1)
-    med_ps = np.sum(ps, axis=-1)/2
-
-    if sel_chs_by is not None:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
-    else:
-        sel_chs_mask = np.ones(muaps.shape[1:3]).astype(bool)
-
-    # Initialise peak frequency
-    med_freq = np.empty(muaps.shape[0:3])
-    med_freq[:] = np.nan
-    for unit, row, col in itertools.product(
-            range(units), range(rows), range(cols)
-            ):
-        if not sel_chs_mask[row, col]:
-            continue
-        med_freq[unit, row, col] = freq[np.argmin(np.abs(
-            cum_ps[unit, row, col] -
-            med_ps[unit, row, col]
-            ))]
-    return med_freq
+    med_ps = np.sum(ps, axis=-1, keepdims=True) / 2
+    med_freq = freq[np.argmin(np.abs(cum_ps - med_ps), axis=-1)]
+    return _mask_unselected_chs(med_freq, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)
 
 
 def get_muap_mean_frequency(
         muaps: np.ndarray,
-        sel_chs_by: Optional[Literal["iqr", "iqr_ptp", "max_amp", "ptp"]] = "iqr",
+        ch_sel_method: Optional[ChSelMethod] = "iqr",
+        ch_sel_metric: ChSelMetric = "abs",
+        ch_sel_param: Optional[float] = None,
         fs: Optional[int] = 2048
     ) -> np.ndarray:
     """
     Compute the mean frequency of motor unit action potentials (MUAPs).
 
-    Parameters:
+    Args:
         muaps (np.ndarray): Array of MUAPs with shape (m, r, c, win_samples),
             where m is the number of motor units, r is the number of rows, c
             is the number of columns, and win_samples is the number of samples
             in the window.
-        sel_chs_by (str, optional): Method for selecting channels:
-            "iqr", "iqr_ptp", "max_amp" or "ptp". None uses every channel.
-            Defaults to "iqr".
+        ch_sel_method (str, optional): Channel selection method, see
+            `muap_comp.get_sel_chs`. Each unit uses its own channels. None uses
+            every channel. Defaults to "iqr".
+        ch_sel_metric (str, optional): Channel amplitude for the selection:
+            "abs" or "ptp". Defaults to "abs".
+        ch_sel_param (float, optional): Quantile ("perc", default 0.95) or
+            number of channels ("n", default 5). Defaults to None.
         fs (int, optional): Sampling frequency in Hz. Defaults to 2048.
 
     Returns:
         np.ndarray: Array of mean frequencies with shape (m, r, c), where m is
             the number of motor units, r is the number of rows, and c is the
-            number of columns.
+            number of columns. Unselected channels are NaN.
 
     Notes:
         - The mean frequency is computed as the weighted average of the frequency
           components in the power spectrum of each MUAP.
-        - If sel_chs_by is specified, the mean frequency is computed only for
-          the selected channels based on the specified method.
     """
-
     # Check muaps size
     if len(muaps.shape) < 4:
         muaps = np.expand_dims(muaps, axis=0)
 
-    # Compute power spectrum for each muap channel
-    units, _, _, samples = muaps.shape
-    ps = np.power(
-            np.abs(np.fft.fft(muaps, n=samples, axis=-1)), 2
-            )[:, :, :, :samples//2]
-    freq = np.fft.fftfreq(n=samples, d=1/fs)[:samples//2]
-
-    # Compute peak frequency
-    mean_freq = np.sum(ps * freq, axis=-1)/np.sum(ps, axis=-1)
-
-    if sel_chs_by is not None:
-        # Build channel selection
-        sel_chs_mask_units = np.zeros(muaps.shape[0:3]).astype(bool)
-        sel_chs_fun = {
-            "iqr": get_highest_iqr_ch,
-            "iqr_ptp": get_highest_iqr_ptp_ch,
-            "max_amp": get_highest_amp_ch,
-            "ptp": get_highest_ptp_ch
-        }
-
-        # Apply channel selection
-        for unit in range(units):
-            sel_chs_mask_units[unit] = sel_chs_fun[sel_chs_by](muaps[unit])
-        sel_chs_mask = np.all(sel_chs_mask_units, axis=0)
-        if not np.any(sel_chs_mask):
-            sel_chs_mask = np.ones_like(sel_chs_mask).astype(bool)
-
-        # Discard non selected channels
-        for unit in range(units):
-            mean_freq[unit][np.logical_not(sel_chs_mask)] = np.nan
-
-    return mean_freq
+    # Power-weighted mean frequency for each muap channel
+    ps, freq = _power_spectrum(muaps, fs)
+    mean_freq = np.sum(ps * freq, axis=-1) / np.sum(ps, axis=-1)
+    return _mask_unselected_chs(mean_freq, muaps, ch_sel_method, ch_sel_metric, ch_sel_param)

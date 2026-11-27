@@ -51,6 +51,7 @@ markdown_extensions:
 
 plugins:
   - search
+  - markdown-exec  # runs the ```python exec="on"``` snippets at build time
   - mkdocstrings:
       handlers:
         python:
